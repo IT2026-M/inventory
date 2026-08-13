@@ -1,0 +1,2866 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة المخازن الذكي</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.18.0/lib/msal-browser.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #1a5276;
+  --primary-light: #2e86c1;
+  --primary-dark: #154360;
+  --accent: #d4ac0d;
+  --accent-light: #f4d03f;
+  --danger: #c0392b;
+  --danger-light: #e74c3c;
+  --success: #1e8449;
+  --success-light: #27ae60;
+  --warning: #d35400;
+  --warning-light: #e67e22;
+  --bg: #f0f4f8;
+  --bg-card: #ffffff;
+  --bg-sidebar: #0d2137;
+  --text: #1a1a2e;
+  --text-muted: #6c757d;
+  --text-light: #adb5bd;
+  --border: #dee2e6;
+  --shadow: 0 4px 20px rgba(0,0,0,0.08);
+  --shadow-hover: 0 8px 30px rgba(0,0,0,0.15);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font: 'Cairo', sans-serif;
+  --org-name: 'نظام إدارة المخازن';
+  --currency: 'ج.م';
+  --date-format: 'DD/MM/YYYY';
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); direction: rtl; min-height:100vh; display:flex; }
+
+/* SIDEBAR */
+#sidebar {
+  width: 260px; min-height:100vh; background: var(--bg-sidebar);
+  position: fixed; right:0; top:0; z-index:100;
+  display:flex; flex-direction:column;
+  box-shadow: -4px 0 20px rgba(0,0,0,0.3);
+  transition: transform 0.3s ease;
+}
+.sidebar-header {
+  padding: 24px 20px;
+  background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.sidebar-logo { display:flex; align-items:center; gap:12px; }
+.sidebar-logo-icon {
+  width:44px; height:44px; background: var(--accent);
+  border-radius:10px; display:flex; align-items:center; justify-content:center;
+  font-size:22px; flex-shrink:0;
+}
+.sidebar-logo-text { color:#fff; }
+.sidebar-logo-text h2 { font-size:14px; font-weight:800; line-height:1.2; }
+.sidebar-logo-text span { font-size:11px; opacity:0.7; }
+.sidebar-nav { flex:1; padding:16px 0; overflow-y:auto; }
+.nav-section-title {
+  padding: 8px 20px 4px;
+  font-size:10px; color: rgba(255,255,255,0.4);
+  text-transform:uppercase; letter-spacing:1.5px; font-weight:700;
+}
+.nav-item {
+  display:flex; align-items:center; gap:12px;
+  padding: 11px 20px; cursor:pointer;
+  color: rgba(255,255,255,0.7); font-size:13.5px; font-weight:500;
+  transition: all 0.2s; border-right:3px solid transparent;
+  margin: 1px 0;
+}
+.nav-item:hover { background: rgba(255,255,255,0.08); color:#fff; }
+.nav-item.active { background: rgba(var(--primary-light-rgb, 46,134,193),0.25); color:#fff; border-right-color: var(--accent); }
+.nav-item .nav-icon { width:20px; text-align:center; font-size:16px; flex-shrink:0; }
+.nav-badge {
+  margin-right: auto; background: var(--danger);
+  color:#fff; font-size:10px; font-weight:700;
+  padding:2px 7px; border-radius:20px; min-width:20px; text-align:center;
+}
+.sidebar-footer {
+  padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5); font-size:11px; text-align:center;
+}
+
+/* MAIN CONTENT */
+#main { margin-right:260px; min-height:100vh; display:flex; flex-direction:column; width:calc(100% - 260px); }
+.topbar {
+  background: var(--bg-card); padding:0 28px;
+  height:64px; display:flex; align-items:center; justify-content:space-between;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.06); position:sticky; top:0; z-index:50;
+}
+.topbar-title { font-size:18px; font-weight:700; color: var(--text); }
+.topbar-actions { display:flex; align-items:center; gap:12px; }
+.topbar-btn {
+  background: none; border:none; cursor:pointer;
+  width:38px; height:38px; border-radius:var(--radius-sm);
+  display:flex; align-items:center; justify-content:center;
+  font-size:18px; color: var(--text-muted); transition: all 0.2s;
+  position:relative;
+}
+.topbar-btn:hover { background: var(--bg); color: var(--text); }
+.notif-dot {
+  position:absolute; top:6px; right:6px;
+  width:8px; height:8px; background: var(--danger); border-radius:50%;
+  border:2px solid var(--bg-card);
+}
+.page-content { padding:24px 28px; flex:1; }
+
+/* CARDS */
+.card {
+  background: var(--bg-card); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding:24px; margin-bottom:20px;
+}
+.card-header {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:20px; padding-bottom:16px;
+  border-bottom:1px solid var(--border);
+}
+.card-title { font-size:15px; font-weight:700; color: var(--text); display:flex; align-items:center; gap:8px; }
+.card-title-icon { font-size:18px; }
+
+/* STAT CARDS */
+.stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
+.stat-card {
+  background: var(--bg-card); border-radius: var(--radius);
+  padding:20px; box-shadow: var(--shadow);
+  display:flex; align-items:center; gap:16px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor:default;
+}
+.stat-card:hover { transform:translateY(-2px); box-shadow: var(--shadow-hover); }
+.stat-icon {
+  width:54px; height:54px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:24px; flex-shrink:0;
+}
+.stat-icon.blue { background: #e8f4fd; }
+.stat-icon.green { background: #e9f7ef; }
+.stat-icon.orange { background: #fef9e7; }
+.stat-icon.red { background: #fdf2f2; }
+.stat-info h3 { font-size:22px; font-weight:800; color: var(--text); }
+.stat-info p { font-size:12px; color: var(--text-muted); font-weight:500; }
+.stat-info .stat-sub { font-size:11px; color: var(--success); margin-top:2px; }
+
+/* BUTTONS */
+.btn {
+  padding:9px 18px; border:none; border-radius:var(--radius-sm);
+  font-family: var(--font); font-size:13px; font-weight:600;
+  cursor:pointer; display:inline-flex; align-items:center; gap:6px;
+  transition: all 0.2s; text-decoration:none; white-space:nowrap;
+}
+.btn-primary { background: var(--primary); color:#fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-success { background: var(--success); color:#fff; }
+.btn-success:hover { background: #196f3d; }
+.btn-danger { background: var(--danger); color:#fff; }
+.btn-danger:hover { background: #a93226; }
+.btn-warning { background: var(--warning); color:#fff; }
+.btn-warning:hover { background: #b7770d; }
+.btn-outline {
+  background: transparent; color: var(--primary);
+  border:1.5px solid var(--primary);
+}
+.btn-outline:hover { background: var(--primary); color:#fff; }
+.btn-sm { padding:6px 12px; font-size:12px; }
+.btn-icon { padding:8px; }
+
+/* TABLES */
+.table-wrapper { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+thead tr { background: var(--bg); }
+th { padding:11px 14px; text-align:right; font-size:12px; font-weight:700; color: var(--text-muted); white-space:nowrap; }
+td { padding:11px 14px; border-bottom:1px solid var(--border); color: var(--text); }
+tbody tr:hover { background: #f8fafc; }
+tbody tr:last-child td { border-bottom:none; }
+
+/* BADGES */
+.badge {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600;
+}
+.badge-success { background:#e9f7ef; color: var(--success); }
+.badge-danger { background:#fdf2f2; color: var(--danger); }
+.badge-warning { background:#fef9e7; color: var(--warning); }
+.badge-info { background:#e8f4fd; color: var(--primary-light); }
+.badge-secondary { background:#f1f3f5; color: var(--text-muted); }
+
+/* FORMS */
+.form-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+.form-grid-3 { grid-template-columns:repeat(3,1fr); }
+.form-group { display:flex; flex-direction:column; gap:6px; }
+.form-group.full { grid-column: 1/-1; }
+label { font-size:13px; font-weight:600; color: var(--text); }
+label span.req { color: var(--danger); margin-right:3px; }
+input, select, textarea {
+  padding:9px 13px; border:1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-family: var(--font);
+  font-size:13px; color: var(--text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--bg-card); width:100%;
+  outline:none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 3px rgba(46,134,193,0.15);
+}
+textarea { resize:vertical; min-height:80px; }
+.input-group { display:flex; }
+.input-group input { border-radius: var(--radius-sm) 0 0 var(--radius-sm); border-left:none; flex:1; }
+.input-group .input-addon {
+  padding:9px 14px; background: var(--bg); border:1.5px solid var(--border);
+  border-radius:0 var(--radius-sm) var(--radius-sm) 0;
+  font-size:13px; color: var(--text-muted); white-space:nowrap;
+  display:flex; align-items:center;
+}
+.search-box { position:relative; }
+.search-box input { padding-right:38px; }
+.search-box .search-icon {
+  position:absolute; right:12px; top:50%; transform:translateY(-50%);
+  color: var(--text-muted); font-size:15px; pointer-events:none;
+}
+
+/* MODALS */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,0.5);
+  z-index:200; display:none; align-items:center; justify-content:center;
+  padding:20px;
+}
+.modal-overlay.open { display:flex; }
+.modal {
+  background: var(--bg-card); border-radius:var(--radius);
+  width:100%; max-width:700px; max-height:90vh;
+  overflow-y:auto; box-shadow:0 20px 60px rgba(0,0,0,0.3);
+  animation: modalIn 0.25s ease;
+}
+@keyframes modalIn { from { opacity:0; transform:translateY(-20px) scale(0.97); } }
+.modal-header {
+  padding:20px 24px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  position:sticky; top:0; background: var(--bg-card); z-index:1;
+}
+.modal-header h3 { font-size:16px; font-weight:700; }
+.modal-close { background:none; border:none; font-size:20px; cursor:pointer; color: var(--text-muted); padding:4px; border-radius:6px; }
+.modal-close:hover { background: var(--bg); color: var(--text); }
+.modal-body { padding:24px; }
+.modal-footer {
+  padding:16px 24px; border-top:1px solid var(--border);
+  display:flex; gap:10px; justify-content:flex-end;
+  position:sticky; bottom:0; background: var(--bg-card);
+}
+
+/* ALERTS */
+.alert {
+  padding:12px 16px; border-radius:var(--radius-sm);
+  display:flex; align-items:flex-start; gap:10px;
+  font-size:13px; margin-bottom:12px;
+}
+.alert-warning { background:#fef9e7; border:1px solid #f9e7a0; color:#7d6608; }
+.alert-danger { background:#fdf2f2; border:1px solid #f5b7b1; color:#922b21; }
+.alert-success { background:#e9f7ef; border:1px solid #a9dfbf; color:#1e6822; }
+.alert-info { background:#e8f4fd; border:1px solid #a9cce3; color:#154360; }
+
+/* TABS */
+.tabs { display:flex; gap:4px; border-bottom:2px solid var(--border); margin-bottom:20px; }
+.tab-btn {
+  padding:10px 18px; border:none; background:none; cursor:pointer;
+  font-family: var(--font); font-size:13px; font-weight:600;
+  color: var(--text-muted); border-bottom:2px solid transparent;
+  margin-bottom:-2px; transition: all 0.2s;
+}
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-btn:hover:not(.active) { color: var(--text); }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* CHARTS */
+.charts-grid { display:grid; grid-template-columns:1.5fr 1fr; gap:16px; margin-bottom:20px; }
+.chart-container { position:relative; height:260px; }
+
+/* NOTIFICATIONS */
+#notifications-panel {
+  position:fixed; left:20px; top:20px; z-index:300;
+  display:flex; flex-direction:column; gap:8px; width:340px;
+}
+.notif-toast {
+  background: var(--bg-card); border-radius:var(--radius-sm);
+  box-shadow:0 8px 30px rgba(0,0,0,0.2); padding:14px 16px;
+  display:flex; align-items:flex-start; gap:12px;
+  animation: slideIn 0.3s ease; border-right:4px solid var(--primary);
+}
+.notif-toast.success { border-right-color: var(--success); }
+.notif-toast.error { border-right-color: var(--danger); }
+.notif-toast.warning { border-right-color: var(--warning); }
+@keyframes slideIn { from { opacity:0; transform: translateX(-20px); } }
+.notif-icon { font-size:20px; flex-shrink:0; }
+.notif-text h4 { font-size:13px; font-weight:700; }
+.notif-text p { font-size:12px; color: var(--text-muted); margin-top:2px; }
+
+/* PROGRESS BARS */
+.progress { background: var(--bg); border-radius:20px; height:8px; overflow:hidden; }
+.progress-bar { height:100%; border-radius:20px; transition: width 0.5s ease; }
+.progress-bar.blue { background: var(--primary-light); }
+.progress-bar.green { background: var(--success-light); }
+.progress-bar.orange { background: var(--warning-light); }
+.progress-bar.red { background: var(--danger-light); }
+
+/* SETTINGS */
+.settings-section { margin-bottom:28px; }
+.settings-section h4 { font-size:14px; font-weight:700; margin-bottom:14px; color: var(--text); padding-bottom:8px; border-bottom:1px solid var(--border); }
+.color-swatches { display:flex; flex-wrap:wrap; gap:10px; }
+.swatch {
+  width:36px; height:36px; border-radius:8px; cursor:pointer;
+  border:2px solid transparent; transition:all 0.2s;
+}
+.swatch.active { border-color: var(--text); transform:scale(1.1); }
+.color-picker-row { display:flex; align-items:center; gap:12px; }
+
+/* PAGES */
+.page { display:none; }
+.page.active { display:block; }
+
+/* EMPTY STATE */
+.empty-state { text-align:center; padding:60px 20px; color: var(--text-muted); }
+.empty-state .empty-icon { font-size:60px; margin-bottom:16px; opacity:0.3; }
+.empty-state h3 { font-size:16px; font-weight:700; margin-bottom:8px; }
+.empty-state p { font-size:13px; }
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-light); }
+
+/* RESPONSIVE */
+@media(max-width:900px) {
+  .stats-grid { grid-template-columns:repeat(2,1fr); }
+  .charts-grid { grid-template-columns:1fr; }
+  .form-grid { grid-template-columns:1fr; }
+  .form-grid-3 { grid-template-columns:1fr; }
+}
+
+/* PRINT */
+@media print { #sidebar, .topbar { display:none; } #main { margin-right:0; width:100%; } }
+
+/* UTILS */
+.flex { display:flex; } .items-center { align-items:center; } .gap-2 { gap:8px; } .gap-3 { gap:12px; }
+.justify-between { justify-content:space-between; } .flex-wrap { flex-wrap:wrap; }
+.text-center { text-align:center; } .font-bold { font-weight:700; } .text-sm { font-size:12px; }
+.text-muted { color: var(--text-muted); } .text-danger { color: var(--danger); } .text-success { color: var(--success); }
+.text-warning { color: var(--warning); } .mt-2 { margin-top:8px; } .mt-3 { margin-top:12px; }
+.mb-3 { margin-bottom:12px; } .p-3 { padding:12px; } .rounded { border-radius: var(--radius-sm); }
+.bg-light { background: var(--bg); }
+.separator { height:1px; background: var(--border); margin:16px 0; }
+.filter-row { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px; }
+.filter-row .form-group { flex:1; min-width:140px; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-icon">🏭</div>
+      <div class="sidebar-logo-text">
+        <h2 id="org-name-display">نظام المخازن</h2>
+        <span>الرقابة الذكية</span>
+      </div>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section-title">الرئيسية</div>
+    <div class="nav-item active" onclick="navigate('dashboard')">
+      <span class="nav-icon">📊</span> لوحة التحكم
+    </div>
+    <div class="nav-section-title">إدارة المخزون</div>
+    <div class="nav-item" onclick="navigate('items')">
+      <span class="nav-icon">📦</span> الأصناف
+    </div>
+    <div class="nav-item" onclick="navigate('warehouses')">
+      <span class="nav-icon">🏢</span> المخازن
+    </div>
+    <div class="nav-item" onclick="navigate('categories')">
+      <span class="nav-icon">🗂️</span> الفئات
+    </div>
+    <div class="nav-section-title">الحركات</div>
+    <div class="nav-item" onclick="navigate('receipts')">
+      <span class="nav-icon">📥</span> أذون الإضافة
+    </div>
+    <div class="nav-item" onclick="navigate('issues')">
+      <span class="nav-icon">📤</span> أذون الصرف
+    </div>
+    <div class="nav-item" onclick="navigate('transfers')">
+      <span class="nav-icon">🔄</span> التحويلات
+    </div>
+    <div class="nav-section-title">المشاريع والجهات</div>
+    <div class="nav-item" onclick="navigate('projects')">
+      <span class="nav-icon">🏗️</span> المشاريع
+    </div>
+    <div class="nav-section-title">التقارير والرقابة</div>
+    <div class="nav-item" onclick="navigate('reports')">
+      <span class="nav-icon">📋</span> التقارير
+    </div>
+    <div class="nav-item" onclick="navigate('alerts')">
+      <span class="nav-icon">🔔</span> التنبيهات
+      <span class="nav-badge" id="alerts-badge">0</span>
+    </div>
+    <div class="nav-item" onclick="navigate('audit')">
+      <span class="nav-icon">🔍</span> سجل النشاط
+    </div>
+    <div class="nav-section-title">الإعدادات</div>
+    <div class="nav-item" onclick="navigate('settings')">
+      <span class="nav-icon">⚙️</span> الإعدادات
+    </div>
+    <div class="nav-item" onclick="navigate('backup')">
+      <span class="nav-icon">💾</span> النسخ الاحتياطي
+    </div>
+  </nav>
+  <div class="sidebar-footer">v1.0 &copy; 2025 نظام إدارة المخازن</div>
+</div>
+
+<!-- NOTIFICATIONS -->
+<div id="notifications-panel"></div>
+
+<!-- MAIN -->
+<div id="main">
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">لوحة التحكم</div>
+    <div class="topbar-actions">
+      <button class="topbar-btn" onclick="navigate('alerts')" title="التنبيهات">
+        🔔 <span class="notif-dot" id="notif-dot" style="display:none"></span>
+      </button>
+      <button class="topbar-btn" title="البحث" onclick="openGlobalSearch()">🔍</button>
+      <button class="topbar-btn" onclick="navigate('settings')">⚙️</button>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">📦</div>
+          <div class="stat-info">
+            <h3 id="stat-items">0</h3>
+            <p>إجمالي الأصناف</p>
+            <div class="stat-sub">في جميع المخازن</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">💰</div>
+          <div class="stat-info">
+            <h3 id="stat-value">0</h3>
+            <p>قيمة المخزون</p>
+            <div class="stat-sub" id="currency-label">ج.م</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon orange">⚠️</div>
+          <div class="stat-info">
+            <h3 id="stat-low">0</h3>
+            <p>أصناف تحت الحد الأدنى</p>
+            <div class="stat-sub" style="color:var(--warning)">تحتاج إعادة طلب</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red">⏰</div>
+          <div class="stat-info">
+            <h3 id="stat-expiry">0</h3>
+            <p>أصناف تنتهي قريباً</p>
+            <div class="stat-sub" style="color:var(--danger)">خلال 30 يوم</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">📈</span> حركة المخزون (آخر 7 أيام)</div>
+          </div>
+          <div class="chart-container"><canvas id="chart-movement"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">🏗️</span> استهلاك المشاريع</div>
+          </div>
+          <div class="chart-container"><canvas id="chart-projects"></canvas></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">⚠️</span> تنبيهات الحد الأدنى</div>
+            <button class="btn btn-sm btn-outline" onclick="navigate('alerts')">عرض الكل</button>
+          </div>
+          <div id="reorder-list">
+            <div class="empty-state"><div class="empty-icon">✅</div><p>لا توجد تنبيهات</p></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">⏰</span> أصناف قاربت على الانتهاء</div>
+            <button class="btn btn-sm btn-outline" onclick="navigate('alerts')">عرض الكل</button>
+          </div>
+          <div id="expiry-list">
+            <div class="empty-state"><div class="empty-icon">✅</div><p>لا توجد تنبيهات</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">🕐</span> آخر الحركات</div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>رقم الإذن</th><th>النوع</th><th>الصنف</th><th>الكمية</th><th>التاريخ</th><th>بواسطة</th></tr></thead>
+            <tbody id="recent-movements"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ITEMS PAGE -->
+    <div class="page" id="page-items">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">📦</span> قاعدة بيانات الأصناف</div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline btn-sm" onclick="exportTableToExcel('items-table','الأصناف')">📊 Excel</button>
+            <button class="btn btn-primary" onclick="openItemModal()">+ إضافة صنف</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="form-group" style="flex:2">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="بحث بالاسم أو الكود أو الباركود..." oninput="filterItems(this.value)" id="item-search">
+            </div>
+          </div>
+          <div class="form-group">
+            <select onchange="filterItems()" id="item-cat-filter">
+              <option value="">كل الفئات</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <select onchange="filterItems()" id="item-wh-filter">
+              <option value="">كل المخازن</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table id="items-table">
+            <thead><tr><th>الكود</th><th>الباركود</th><th>اسم الصنف</th><th>الفئة</th><th>وحدة القياس</th><th>الرصيد</th><th>سعر التكلفة</th><th>الحد الأدنى</th><th>الحالة</th><th>إجراءات</th></tr></thead>
+            <tbody id="items-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- WAREHOUSES -->
+    <div class="page" id="page-warehouses">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">🏢</span> إدارة المخازن</div>
+          <button class="btn btn-primary" onclick="openWarehouseModal()">+ إضافة مخزن</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>كود المخزن</th><th>اسم المخزن</th><th>النوع</th><th>الموقع/العنوان</th><th>المسؤول</th><th>عدد الأصناف</th><th>إجراءات</th></tr></thead>
+            <tbody id="warehouses-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CATEGORIES -->
+    <div class="page" id="page-categories">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">🗂️</span> الفئات الرئيسية</div>
+            <button class="btn btn-primary btn-sm" onclick="openCategoryModal('main')">+ إضافة</button>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>الاسم</th><th>الوصف</th><th>عدد الأصناف</th><th>إجراءات</th></tr></thead>
+              <tbody id="main-cats-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="card-title-icon">📂</span> الفئات الفرعية</div>
+            <button class="btn btn-primary btn-sm" onclick="openCategoryModal('sub')">+ إضافة</button>
+          </div>
+          <div class="table-wrapper">
+            <table>
+              <thead><tr><th>الاسم</th><th>الفئة الرئيسية</th><th>إجراءات</th></tr></thead>
+              <tbody id="sub-cats-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECEIPTS -->
+    <div class="page" id="page-receipts">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">📥</span> أذون الإضافة للمخزون</div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline btn-sm" onclick="exportTableToExcel('receipts-table','أذون الإضافة')">📊 Excel</button>
+            <button class="btn btn-primary" onclick="openReceiptModal()">+ إذن إضافة جديد</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="form-group" style="flex:2">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="بحث برقم الإذن أو المورد..." oninput="filterReceipts(this.value)">
+            </div>
+          </div>
+          <div class="form-group"><input type="date" onchange="filterReceipts()" id="receipt-date-filter"></div>
+          <div class="form-group">
+            <select onchange="filterReceipts()" id="receipt-status-filter">
+              <option value="">كل الحالات</option>
+              <option value="مقبول">مقبول</option>
+              <option value="مرفوض">مرفوض</option>
+              <option value="مقبول تحفظياً">مقبول تحفظياً</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table id="receipts-table">
+            <thead><tr><th>رقم الإذن</th><th>التاريخ</th><th>المخزن</th><th>عدد الأصناف</th><th>المورد</th><th>قرار اللجنة</th><th>المدققون</th><th>إجراءات</th></tr></thead>
+            <tbody id="receipts-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISSUES -->
+    <div class="page" id="page-issues">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">📤</span> أذون الصرف</div>
+          <div class="flex gap-2">
+            <button class="btn btn-outline btn-sm" onclick="exportTableToExcel('issues-table','أذون الصرف')">📊 Excel</button>
+            <button class="btn btn-primary" onclick="openIssueModal()">+ إذن صرف جديد</button>
+          </div>
+        </div>
+        <div class="filter-row">
+          <div class="form-group" style="flex:2">
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="بحث برقم الإذن أو المستلم أو المشروع..." oninput="filterIssues(this.value)">
+            </div>
+          </div>
+          <div class="form-group"><input type="date" onchange="filterIssues()" id="issue-date-filter"></div>
+          <div class="form-group">
+            <select onchange="filterIssues()" id="issue-project-filter">
+              <option value="">كل المشاريع</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table id="issues-table">
+            <thead><tr><th>رقم الإذن</th><th>التاريخ</th><th>المخزن</th><th>المستلم</th><th>المشروع</th><th>عدد الأصناف</th><th>إجراءات</th></tr></thead>
+            <tbody id="issues-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSFERS -->
+    <div class="page" id="page-transfers">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">🔄</span> التحويلات بين المخازن</div>
+          <button class="btn btn-primary" onclick="openTransferModal()">+ إذن تحويل جديد</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>رقم الإذن</th><th>التاريخ</th><th>من مخزن</th><th>إلى مخزن</th><th>عدد الأصناف</th><th>الحالة</th><th>بواسطة</th><th>إجراءات</th></tr></thead>
+            <tbody id="transfers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROJECTS -->
+    <div class="page" id="page-projects">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">🏗️</span> إدارة المشاريع</div>
+          <button class="btn btn-primary" onclick="openProjectModal()">+ إضافة مشروع</button>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>كود المشروع</th><th>اسم المشروع</th><th>المسؤول</th><th>الحالة</th><th>إجمالي الاستهلاك</th><th>إجراءات</th></tr></thead>
+            <tbody id="projects-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('rep','balance')">📊 أرصدة المخزون</button>
+        <button class="tab-btn" onclick="switchTab('rep','project-report')">🏗️ تقرير المشاريع</button>
+        <button class="tab-btn" onclick="switchTab('rep','item-history')">📜 كارت الصنف</button>
+        <button class="tab-btn" onclick="switchTab('rep','expiry-report')">⏰ تقرير الصلاحية</button>
+      </div>
+
+      <div class="tab-panel active" id="rep-balance">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">أرصدة المخزون</div>
+            <div class="flex gap-2">
+              <button class="btn btn-sm btn-outline" onclick="exportTableToExcel('balance-table','أرصدة المخزون')">📊 Excel</button>
+              <button class="btn btn-sm btn-primary" onclick="printReport('balance-table','أرصدة المخزون')">🖨️ طباعة</button>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table id="balance-table">
+              <thead><tr><th>الكود</th><th>اسم الصنف</th><th>الفئة</th><th>الرصيد الحالي</th><th>وحدة القياس</th><th>سعر التكلفة</th><th>إجمالي القيمة</th><th>المخزن</th></tr></thead>
+              <tbody id="balance-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="rep-project-report">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">استهلاك المشاريع</div>
+            <div class="flex gap-2">
+              <button class="btn btn-sm btn-outline" onclick="exportTableToExcel('project-report-table','استهلاك المشاريع')">📊 Excel</button>
+            </div>
+          </div>
+          <div class="table-wrapper">
+            <table id="project-report-table">
+              <thead><tr><th>المشروع</th><th>الصنف</th><th>الكمية المستهلكة</th><th>وحدة القياس</th><th>التكلفة الإجمالية</th></tr></thead>
+              <tbody id="project-report-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="rep-item-history">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">كارت الصنف (سجل الحركة)</div>
+            <button class="btn btn-sm btn-outline" onclick="exportTableToExcel('history-table','كارت الصنف')">📊 Excel</button>
+          </div>
+          <div class="filter-row">
+            <div class="form-group" style="flex:2">
+              <select id="history-item-select" onchange="loadItemHistory()">
+                <option value="">اختر الصنف...</option>
+              </select>
+            </div>
+            <div class="form-group"><input type="date" id="history-from"></div>
+            <div class="form-group"><input type="date" id="history-to"></div>
+            <button class="btn btn-primary" onclick="loadItemHistory()">🔍 عرض</button>
+          </div>
+          <div class="table-wrapper">
+            <table id="history-table">
+              <thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>رقم الإذن</th><th>الكمية الواردة</th><th>الكمية الصادرة</th><th>الرصيد</th><th>المورد/الجهة</th><th>بواسطة</th></tr></thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" id="rep-expiry-report">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">تقرير الصلاحية</div>
+            <button class="btn btn-sm btn-outline" onclick="exportTableToExcel('expiry-table','تقرير الصلاحية')">📊 Excel</button>
+          </div>
+          <div class="filter-row">
+            <div class="form-group">
+              <label>عرض الأصناف التي تنتهي خلال</label>
+              <div class="input-group">
+                <input type="number" id="expiry-days" value="30" min="1">
+                <span class="input-addon">يوم</span>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="loadExpiryReport()">🔍 عرض</button>
+          </div>
+          <div class="table-wrapper">
+            <table id="expiry-table">
+              <thead><tr><th>الصنف</th><th>الدفعة</th><th>تاريخ الإنتاج</th><th>تاريخ الانتهاء</th><th>الأيام المتبقية</th><th>الكمية</th><th>المخزن</th><th>الحالة</th></tr></thead>
+              <tbody id="expiry-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="page" id="page-alerts">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">🔔</span> مركز التنبيهات</div>
+        </div>
+        <div id="alerts-content"></div>
+      </div>
+    </div>
+
+    <!-- AUDIT LOG -->
+    <div class="page" id="page-audit">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">🔍</span> سجل النشاط (Audit Log)</div>
+          <button class="btn btn-sm btn-outline" onclick="exportTableToExcel('audit-table','سجل النشاط')">📊 Excel</button>
+        </div>
+        <div class="alert alert-info mb-3">
+          <span>ℹ️</span> هذا السجل غير قابل للتعديل ويرصد جميع العمليات التي تمت على النظام
+        </div>
+        <div class="table-wrapper">
+          <table id="audit-table">
+            <thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th><th>القسم</th></tr></thead>
+            <tbody id="audit-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">⚙️</span> إعدادات النظام</div>
+          <button class="btn btn-success" onclick="saveSettings()">💾 حفظ الإعدادات</button>
+        </div>
+
+        <div class="settings-section">
+          <h4>🏢 بيانات المؤسسة</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>اسم المؤسسة / المكان</label>
+              <input type="text" id="set-org-name" placeholder="اسم الشركة أو المؤسسة">
+            </div>
+            <div class="form-group">
+              <label>العملة المستخدمة</label>
+              <select id="set-currency">
+                <option value="ج.م">جنيه مصري (ج.م)</option>
+                <option value="ر.س">ريال سعودي (ر.س)</option>
+                <option value="د.إ">درهم إماراتي (د.إ)</option>
+                <option value="د.ك">دينار كويتي (د.ك)</option>
+                <option value="ر.ق">ريال قطري (ر.ق)</option>
+                <option value="د.ب">دينار بحريني (د.ب)</option>
+                <option value="ر.ع">ريال عماني (ر.ع)</option>
+                <option value="د.ج">دينار جزائري (د.ج)</option>
+                <option value="د.م">درهم مغربي (د.م)</option>
+                <option value="$">دولار أمريكي ($)</option>
+                <option value="€">يورو (€)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h4>📅 تنسيق التاريخ</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>تنسيق عرض التاريخ</label>
+              <select id="set-date-format">
+                <option value="DD/MM/YYYY">يوم/شهر/سنة (DD/MM/YYYY)</option>
+                <option value="MM/DD/YYYY">شهر/يوم/سنة (MM/DD/YYYY)</option>
+                <option value="YYYY/MM/DD">سنة/شهر/يوم (YYYY/MM/DD)</option>
+                <option value="DD-MM-YYYY">يوم-شهر-سنة (DD-MM-YYYY)</option>
+                <option value="MM-DD-YYYY">شهر-يوم-سنة (MM-DD-YYYY)</option>
+                <option value="YYYY-MM-DD">سنة-شهر-يوم (YYYY-MM-DD)</option>
+                <option value="DD.MM.YYYY">يوم.شهر.سنة (DD.MM.YYYY)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>مثال على التاريخ</label>
+              <input type="text" id="date-preview" readonly style="background:var(--bg)">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h4>🎨 الألوان والمظهر</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>اللون الرئيسي</label>
+              <div class="color-picker-row">
+                <input type="color" id="set-primary-color" value="#1a5276" style="width:50px;height:38px;padding:2px;border-radius:8px;cursor:pointer;border:1.5px solid var(--border)">
+                <div class="color-swatches">
+                  <div class="swatch active" style="background:#1a5276" onclick="setPrimaryColor('#1a5276')"></div>
+                  <div class="swatch" style="background:#154360" onclick="setPrimaryColor('#154360')"></div>
+                  <div class="swatch" style="background:#1e3a5f" onclick="setPrimaryColor('#1e3a5f')"></div>
+                  <div class="swatch" style="background:#196f3d" onclick="setPrimaryColor('#196f3d')"></div>
+                  <div class="swatch" style="background:#784212" onclick="setPrimaryColor('#784212')"></div>
+                  <div class="swatch" style="background:#6c3483" onclick="setPrimaryColor('#6c3483')"></div>
+                  <div class="swatch" style="background:#7b241c" onclick="setPrimaryColor('#7b241c')"></div>
+                  <div class="swatch" style="background:#1a252f" onclick="setPrimaryColor('#1a252f')"></div>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>اللون المميز (Accent)</label>
+              <div class="color-picker-row">
+                <input type="color" id="set-accent-color" value="#d4ac0d" style="width:50px;height:38px;padding:2px;border-radius:8px;cursor:pointer;border:1.5px solid var(--border)">
+                <div class="color-swatches">
+                  <div class="swatch active" style="background:#d4ac0d" onclick="setAccentColor('#d4ac0d')"></div>
+                  <div class="swatch" style="background:#e67e22" onclick="setAccentColor('#e67e22')"></div>
+                  <div class="swatch" style="background:#27ae60" onclick="setAccentColor('#27ae60')"></div>
+                  <div class="swatch" style="background:#3498db" onclick="setAccentColor('#3498db')"></div>
+                  <div class="swatch" style="background:#e74c3c" onclick="setAccentColor('#e74c3c')"></div>
+                  <div class="swatch" style="background:#9b59b6" onclick="setAccentColor('#9b59b6')"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h4>🔔 إعدادات التنبيهات</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>تنبيه انتهاء الصلاحية (أيام قبل الانتهاء)</label>
+              <input type="number" id="set-expiry-days" value="30" min="1" max="365">
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h4>👤 بيانات المستخدم الحالي</h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>اسم المستخدم (يظهر في سجل النشاط)</label>
+              <input type="text" id="set-username" placeholder="اسم المستخدم" value="المدير">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BACKUP -->
+    <div class="page" id="page-backup">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="card-title-icon">💾</span> النسخ الاحتياطي والاستعادة</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div>
+            <div class="alert alert-info mb-3">
+              <span>ℹ️</span>
+              <div>يمكنك تنزيل نسخة احتياطية كاملة من جميع بيانات النظام بصيغة JSON، ويمكنك استعادتها لاحقاً.</div>
+            </div>
+            <h4 style="margin-bottom:12px;font-size:14px">📥 إنشاء نسخة احتياطية</h4>
+            <p class="text-muted text-sm mb-3">سيتم تنزيل ملف يحتوي على كل البيانات: الأصناف، المخازن، الحركات، المشاريع، والإعدادات.</p>
+            <button class="btn btn-primary" onclick="createBackup()">💾 تنزيل نسخة احتياطية الآن</button>
+          </div>
+          <div>
+            <div class="alert alert-warning mb-3">
+              <span>⚠️</span>
+              <div>استعادة النسخة الاحتياطية ستحل محل جميع البيانات الحالية. تأكد من عمل نسخة احتياطية جديدة قبل الاستعادة.</div>
+            </div>
+            <h4 style="margin-bottom:12px;font-size:14px">📤 استعادة نسخة احتياطية</h4>
+            <p class="text-muted text-sm mb-3">اختر ملف النسخة الاحتياطية بصيغة .json لاستعادة البيانات.</p>
+            <input type="file" id="restore-file" accept=".json" style="display:none" onchange="restoreBackup(this)">
+            <button class="btn btn-warning" onclick="document.getElementById('restore-file').click()">📂 اختيار ملف الاستعادة</button>
+          </div>
+        </div>
+
+        <div class="separator"></div>
+        <h4 style="margin-bottom:16px;font-size:14px">📋 سجل النسخ الاحتياطية</h4>
+        <div id="backup-log">
+          <div class="empty-state"><div class="empty-icon">💾</div><p>لم يتم إنشاء أي نسخ احتياطية بعد</p></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODALS -->
+
+<!-- Item Modal -->
+<div class="modal-overlay" id="modal-item">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="item-modal-title">إضافة صنف جديد</h3>
+      <button class="modal-close" onclick="closeModal('modal-item')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>اسم الصنف <span class="req">*</span></label><input type="text" id="item-name"></div>
+        <div class="form-group"><label>كود الصنف <span class="req">*</span></label><input type="text" id="item-code"></div>
+        <div class="form-group"><label>الباركود</label><input type="text" id="item-barcode" placeholder="أدخل أو امسح الباركود"></div>
+        <div class="form-group">
+          <label>الفئة الرئيسية</label>
+          <select id="item-main-cat" onchange="updateSubCats()">
+            <option value="">اختر...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>الفئة الفرعية</label>
+          <select id="item-sub-cat"><option value="">اختر...</option></select>
+        </div>
+        <div class="form-group">
+          <label>المخزن الرئيسي <span class="req">*</span></label>
+          <select id="item-warehouse"><option value="">اختر...</option></select>
+        </div>
+        <div class="form-group"><label>وحدة القياس <span class="req">*</span></label>
+          <select id="item-unit">
+            <option value="قطعة">قطعة</option><option value="كجم">كجم</option>
+            <option value="متر">متر</option><option value="لتر">لتر</option>
+            <option value="علبة">علبة</option><option value="كرتون">كرتون</option>
+            <option value="طن">طن</option><option value="م²">متر مربع</option>
+            <option value="م³">متر مكعب</option><option value="ط.م">طن متري</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+        </div>
+        <div class="form-group"><label>سعر التكلفة</label>
+          <div class="input-group">
+            <input type="number" id="item-cost" value="0" min="0" step="0.01">
+            <span class="input-addon" id="item-cost-currency">ج.م</span>
+          </div>
+        </div>
+        <div class="form-group"><label>الرصيد الابتدائي</label><input type="number" id="item-initial" value="0" min="0"></div>
+        <div class="form-group"><label>نقطة إعادة الطلب (الحد الأدنى)</label><input type="number" id="item-reorder" value="0" min="0"></div>
+        <div class="form-group full"><label>ملاحظات</label><textarea id="item-notes" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-item')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveItem()">💾 حفظ الصنف</button>
+    </div>
+  </div>
+</div>
+
+<!-- Warehouse Modal -->
+<div class="modal-overlay" id="modal-warehouse">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>إضافة مخزن جديد</h3>
+      <button class="modal-close" onclick="closeModal('modal-warehouse')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label>كود المخزن <span class="req">*</span></label><input type="text" id="wh-code"></div>
+        <div class="form-group"><label>اسم المخزن <span class="req">*</span></label><input type="text" id="wh-name"></div>
+        <div class="form-group">
+          <label>النوع</label>
+          <select id="wh-type">
+            <option value="رئيسي">رئيسي</option>
+            <option value="فرعي">فرعي</option>
+            <option value="موقع مشروع">موقع مشروع</option>
+          </select>
+        </div>
+        <div class="form-group"><label>المسؤول</label><input type="text" id="wh-manager"></div>
+        <div class="form-group full"><label>الموقع / العنوان</label><input type="text" id="wh-location"></div>
+        <div class="form-group full"><label>ملاحظات</label><textarea id="wh-notes" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-warehouse')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveWarehouse()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Category Modal -->
+<div class="modal-overlay" id="modal-category">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <h3 id="cat-modal-title">إضافة فئة</h3>
+      <button class="modal-close" onclick="closeModal('modal-category')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="cat-type">
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div class="form-group"><label>اسم الفئة <span class="req">*</span></label><input type="text" id="cat-name"></div>
+        <div class="form-group" id="cat-parent-group" style="display:none">
+          <label>الفئة الرئيسية</label>
+          <select id="cat-parent"><option value="">اختر...</option></select>
+        </div>
+        <div class="form-group"><label>الوصف</label><input type="text" id="cat-desc"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-category')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveCategory()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal-overlay" id="modal-receipt">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <h3>إذن إضافة للمخزون</h3>
+      <button class="modal-close" onclick="closeModal('modal-receipt')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid mb-3">
+        <div class="form-group"><label>رقم الإذن</label><input type="text" id="rec-number" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>التاريخ <span class="req">*</span></label><input type="date" id="rec-date"></div>
+        <div class="form-group"><label>المخزن <span class="req">*</span></label><select id="rec-warehouse"><option value="">اختر...</option></select></div>
+        <div class="form-group"><label>المورد</label><input type="text" id="rec-supplier"></div>
+        <div class="form-group"><label>رقم فاتورة المورد</label><input type="text" id="rec-invoice"></div>
+      </div>
+
+      <div class="card bg-light p-3 mb-3" style="border:1.5px dashed var(--warning)">
+        <div class="card-title mb-3" style="font-size:14px">🔒 لجنة الفحص والاستلام الثلاثية</div>
+        <div class="form-grid form-grid-3">
+          <div class="form-group"><label>الطرف الأول (المستلم) <span class="req">*</span></label><input type="text" id="rec-p1"></div>
+          <div class="form-group"><label>الطرف الثاني (المدقق) <span class="req">*</span></label><input type="text" id="rec-p2"></div>
+          <div class="form-group"><label>الطرف الثالث (المشرف) <span class="req">*</span></label><input type="text" id="rec-p3"></div>
+        </div>
+        <div class="form-grid mt-2">
+          <div class="form-group">
+            <label>قرار اللجنة <span class="req">*</span></label>
+            <select id="rec-decision">
+              <option value="">اختر القرار...</option>
+              <option value="مقبول">✅ مقبول</option>
+              <option value="مرفوض">❌ مرفوض</option>
+              <option value="مقبول تحفظياً">⚠️ مقبول تحفظياً</option>
+            </select>
+          </div>
+          <div class="form-group"><label>ملاحظات اللجنة</label><input type="text" id="rec-committee-notes"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <strong style="font-size:14px">📦 الأصناف</strong>
+        <button class="btn btn-sm btn-success" onclick="addReceiptLine()">+ إضافة صنف</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>الصنف</th><th>الكمية</th><th>سعر الوحدة</th><th>تاريخ الإنتاج</th><th>تاريخ الانتهاء</th><th>رقم الدفعة</th><th>حذف</th></tr></thead>
+          <tbody id="rec-lines"></tbody>
+        </table>
+      </div>
+
+      <div class="form-group mt-3 full"><label>ملاحظات عامة</label><textarea id="rec-notes" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-receipt')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveReceipt()">💾 حفظ وإضافة للمخزون</button>
+    </div>
+  </div>
+</div>
+
+<!-- Issue Modal -->
+<div class="modal-overlay" id="modal-issue">
+  <div class="modal" style="max-width:780px">
+    <div class="modal-header">
+      <h3>إذن صرف من المخزون</h3>
+      <button class="modal-close" onclick="closeModal('modal-issue')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid mb-3">
+        <div class="form-group"><label>رقم الإذن</label><input type="text" id="iss-number" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>التاريخ <span class="req">*</span></label><input type="date" id="iss-date"></div>
+        <div class="form-group"><label>المخزن <span class="req">*</span></label><select id="iss-warehouse"><option value="">اختر...</option></select></div>
+        <div class="form-group"><label>المستلم <span class="req">*</span></label><input type="text" id="iss-receiver"></div>
+        <div class="form-group">
+          <label>المشروع</label>
+          <select id="iss-project"><option value="">بدون مشروع</option></select>
+        </div>
+        <div class="form-group"><label>الغرض / الوصف</label><input type="text" id="iss-purpose"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <strong style="font-size:14px">📦 الأصناف المصروفة</strong>
+        <button class="btn btn-sm btn-success" onclick="addIssueLine()">+ إضافة صنف</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>الصنف</th><th>الكمية المتاحة</th><th>الكمية المصروفة</th><th>حذف</th></tr></thead>
+          <tbody id="iss-lines"></tbody>
+        </table>
+      </div>
+
+      <div class="form-group mt-3 full"><label>ملاحظات</label><textarea id="iss-notes" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-issue')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveIssue()">💾 حفظ وصرف من المخزون</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transfer Modal -->
+<div class="modal-overlay" id="modal-transfer">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-header">
+      <h3>إذن تحويل بين المخازن</h3>
+      <button class="modal-close" onclick="closeModal('modal-transfer')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid mb-3">
+        <div class="form-group"><label>رقم الإذن</label><input type="text" id="tr-number" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>التاريخ <span class="req">*</span></label><input type="date" id="tr-date"></div>
+        <div class="form-group"><label>من مخزن <span class="req">*</span></label><select id="tr-from"><option value="">اختر...</option></select></div>
+        <div class="form-group"><label>إلى مخزن <span class="req">*</span></label><select id="tr-to"><option value="">اختر...</option></select></div>
+        <div class="form-group full"><label>سبب التحويل</label><input type="text" id="tr-reason"></div>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <strong style="font-size:14px">📦 الأصناف المحولة</strong>
+        <button class="btn btn-sm btn-success" onclick="addTransferLine()">+ إضافة صنف</button>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>الصنف</th><th>الكمية المتاحة</th><th>الكمية المحولة</th><th>حذف</th></tr></thead>
+          <tbody id="tr-lines"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-transfer')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveTransfer()">💾 تنفيذ التحويل</button>
+    </div>
+  </div>
+</div>
+
+<!-- Project Modal -->
+<div class="modal-overlay" id="modal-project">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-header">
+      <h3>إضافة مشروع</h3>
+      <button class="modal-close" onclick="closeModal('modal-project')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="grid-template-columns:1fr">
+        <div class="form-group"><label>كود المشروع <span class="req">*</span></label><input type="text" id="proj-code"></div>
+        <div class="form-group"><label>اسم المشروع <span class="req">*</span></label><input type="text" id="proj-name"></div>
+        <div class="form-group"><label>المسؤول</label><input type="text" id="proj-manager"></div>
+        <div class="form-group"><label>الحالة</label>
+          <select id="proj-status">
+            <option value="نشط">نشط</option>
+            <option value="منتهي">منتهي</option>
+            <option value="متوقف">متوقف</option>
+          </select>
+        </div>
+        <div class="form-group"><label>ملاحظات</label><textarea id="proj-notes" rows="2"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-project')">إلغاء</button>
+      <button class="btn btn-primary" onclick="saveProject()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Item Detail Modal -->
+<div class="modal-overlay" id="modal-item-detail">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <h3 id="detail-title">تفاصيل الصنف</h3>
+      <button class="modal-close" onclick="closeModal('modal-item-detail')">✕</button>
+    </div>
+    <div class="modal-body" id="item-detail-body"></div>
+  </div>
+</div>
+
+<!-- Global Search Modal -->
+<div class="modal-overlay" id="modal-search">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h3>🔍 البحث الشامل</h3>
+      <button class="modal-close" onclick="closeModal('modal-search')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="text" id="global-search-input" placeholder="ابحث بالاسم، الكود، الباركود، المشروع..." oninput="globalSearch(this.value)" style="font-size:15px;padding:12px">
+      <div id="global-search-results" style="margin-top:16px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="modal-confirm">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3 id="confirm-title">تأكيد</h3>
+      <button class="modal-close" onclick="closeModal('modal-confirm')">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirm-message"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('modal-confirm')">إلغاء</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">تأكيد</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA STORE
+// ============================================================
+let DB = {
+  settings: {
+    orgName: 'نظام إدارة المخازن',
+    currency: 'ج.م',
+    dateFormat: 'DD/MM/YYYY',
+    primaryColor: '#1a5276',
+    accentColor: '#d4ac0d',
+    expiryWarnDays: 30,
+    username: 'المدير'
+  },
+  warehouses: [],
+  mainCategories: [],
+  subCategories: [],
+  items: [],
+  receipts: [],
+  issues: [],
+  transfers: [],
+  projects: [],
+  movements: [], // unified movement log
+  auditLog: [],
+  backupLog: [],
+  counters: { receipt: 1, issue: 1, transfer: 1 }
+};
+
+// ============================================================
+// UTILS
+// ============================================================
+function genId() { return Date.now().toString(36) + Math.random().toString(36).substr(2,5); }
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  if (isNaN(d)) return dateStr;
+  const day = String(d.getDate()).padStart(2,'0');
+  const month = String(d.getMonth()+1).padStart(2,'0');
+  const year = d.getFullYear();
+  const fmt = DB.settings.dateFormat || 'DD/MM/YYYY';
+  return fmt.replace('DD',day).replace('MM',month).replace('YYYY',year);
+}
+
+function today() { return new Date().toISOString().split('T')[0]; }
+
+function formatCurrency(val) {
+  const n = parseFloat(val)||0;
+  return n.toLocaleString('ar-EG',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + DB.settings.currency;
+}
+
+function showNotif(title, message, type='info') {
+  const panel = document.getElementById('notifications-panel');
+  const icons = {info:'ℹ️', success:'✅', error:'❌', warning:'⚠️'};
+  const el = document.createElement('div');
+  el.className = `notif-toast ${type}`;
+  el.innerHTML = `<span class="notif-icon">${icons[type]||'ℹ️'}</span><div class="notif-text"><h4>${title}</h4><p>${message}</p></div>`;
+  panel.appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateX(-20px)'; el.style.transition='all 0.3s'; setTimeout(()=>el.remove(),300); }, 3500);
+}
+
+function addAuditLog(action, detail, section) {
+  DB.auditLog.unshift({
+    id: genId(),
+    datetime: new Date().toLocaleString('ar-EG'),
+    user: DB.settings.username || 'المدير',
+    action, detail, section
+  });
+  saveDB();
+}
+
+// ============================================================
+// SHAREPOINT INTEGRATION (via Microsoft Graph API + MSAL.js)
+// Replaces localStorage as the persistence layer so the data
+// lives centrally online (in a SharePoint list) instead of in
+// each user's browser. Works from ANY domain (this page is
+// hosted at careinventory.cef-eg.org, outside SharePoint) —
+// auth happens through a Microsoft login popup (MSAL).
+// See SETUP-GUIDE.md for how to configure Azure AD + the list.
+// ============================================================
+const SP_CONFIG = {
+  clientId: '442fb281-218f-4622-8732-65ee0d6e35ea',   // Application (client) ID from Azure App Registration
+  tenantId: '8a94f984-7ac5-49ca-9e11-9df9de6faf47',   // Directory (tenant) ID from Azure App Registration
+  siteHostname: 'careegfoundation.sharepoint.com',
+  sitePath: '/sites/Inventory',
+  listName: 'InventoryAppData',        // SharePoint list that stores the data
+  adminGroupName: 'Inventory-Admins'   // Microsoft 365 / security group granted admin rights
+};
+
+if (typeof msal === 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.innerHTML = `<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d2137;color:#fff;font-family:'Cairo',sans-serif;text-align:center;padding:40px;">
+      <div style="max-width:480px;"><div style="font-size:48px;margin-bottom:16px;">⚠️</div>
+      <h2 style="margin-bottom:12px;">تعذر تحميل مكتبة تسجيل الدخول (MSAL)</h2>
+      <p style="opacity:0.8;line-height:1.8;">تحقق من اتصال الإنترنت أو من أن الشبكة لا تحجب cdn.jsdelivr.net، ثم أعد تحميل الصفحة.</p></div></div>`;
+  });
+  throw new Error('MSAL library failed to load');
+}
+const msalInstance = new msal.PublicClientApplication({
+  auth: {
+    clientId: SP_CONFIG.clientId,
+    authority: `https://login.microsoftonline.com/${SP_CONFIG.tenantId}`,
+    redirectUri: window.location.origin + window.location.pathname
+  },
+  cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
+});
+
+const GRAPH_SCOPES = ['User.Read', 'Sites.ReadWrite.All', 'GroupMember.Read.All'];
+
+let graphSiteId = null;
+let graphListId = null;
+let spItemCache = {};      // { collectionKey: { itemId } }
+let spDirtyKeys = new Set();
+let spSaveTimer = null;
+let currentSPUser = null;
+let isAdmin = false;
+
+async function spSignIn() {
+  const loginResp = await msalInstance.loginPopup({ scopes: GRAPH_SCOPES, prompt: 'select_account' });
+  msalInstance.setActiveAccount(loginResp.account);
+  return {
+    loginName: loginResp.account.username,
+    displayName: loginResp.account.name || loginResp.account.username
+  };
+}
+
+async function spGetToken() {
+  const account = msalInstance.getActiveAccount();
+  if (!account) throw new Error('not-signed-in');
+  try {
+    const resp = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account });
+    return resp.accessToken;
+  } catch (e) {
+    const resp = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES, account });
+    return resp.accessToken;
+  }
+}
+
+async function graphFetch(path, options = {}) {
+  const token = await spGetToken();
+  const res = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`graph-failed:${path}:${res.status}:${body}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+async function spResolveSiteAndList() {
+  if (!graphSiteId) {
+    const site = await graphFetch(`/sites/${SP_CONFIG.siteHostname}:${SP_CONFIG.sitePath}`);
+    graphSiteId = site.id;
+  }
+  if (!graphListId) {
+    const lists = await graphFetch(`/sites/${graphSiteId}/lists?$select=id,displayName`);
+    const match = lists.value.find(l => l.displayName === SP_CONFIG.listName);
+    if (!match) throw new Error('list-not-found:' + SP_CONFIG.listName);
+    graphListId = match.id;
+  }
+}
+
+async function spCreateItem(key, value) {
+  const data = await graphFetch(`/sites/${graphSiteId}/lists/${graphListId}/items`, {
+    method: 'POST',
+    body: JSON.stringify({ fields: { Title: key, JSONData: JSON.stringify(value) } })
+  });
+  spItemCache[key] = { itemId: data.id };
+}
+
+async function spUpdateItem(key, value) {
+  const cached = spItemCache[key];
+  if (!cached) { await spCreateItem(key, value); return; }
+  try {
+    await graphFetch(`/sites/${graphSiteId}/lists/${graphListId}/items/${cached.itemId}/fields`, {
+      method: 'PATCH',
+      body: JSON.stringify({ JSONData: JSON.stringify(value) })
+    });
+  } catch (e) {
+    if (String(e).includes(':404:')) { delete spItemCache[key]; await spCreateItem(key, value); return; }
+    throw new Error('update-failed:' + key);
+  }
+}
+
+async function spLoadAll() {
+  await spResolveSiteAndList();
+  const data = await graphFetch(`/sites/${graphSiteId}/lists/${graphListId}/items?$expand=fields&$select=id,fields&$top=5000`);
+  const defaults = {
+    settings: DB.settings, warehouses: [], mainCategories: [], subCategories: [],
+    items: [], receipts: [], issues: [], transfers: [], projects: [],
+    movements: [], auditLog: [], backupLog: [], counters: { receipt: 1, issue: 1, transfer: 1 }
+  };
+  const found = {};
+  (data.value || []).forEach(r => {
+    const key = r.fields.Title;
+    found[key] = true;
+    spItemCache[key] = { itemId: r.id };
+    try { DB[key] = JSON.parse(r.fields.JSONData); } catch(e) { /* keep default below */ }
+  });
+  for (const key of Object.keys(defaults)) {
+    if (!found[key]) { DB[key] = defaults[key]; await spCreateItem(key, defaults[key]); }
+  }
+}
+
+async function loadUserRole() {
+  try {
+    const data = await graphFetch(`/me/memberOf?$select=displayName`);
+    isAdmin = (data.value || []).some(g => g.displayName === SP_CONFIG.adminGroupName);
+  } catch(e) { isAdmin = false; }
+}
+
+function saveDB() {
+  // Debounced batch save: every call marks all collections dirty and
+  // (re)starts a short timer so rapid successive edits collapse into
+  // one round of SharePoint writes instead of one per keystroke/click.
+  Object.keys(DB).forEach(k => spDirtyKeys.add(k));
+  clearTimeout(spSaveTimer);
+  spSaveTimer = setTimeout(flushSave, 900);
+}
+
+async function flushSave() {
+  const keys = Array.from(spDirtyKeys);
+  spDirtyKeys.clear();
+  for (const key of keys) {
+    try {
+      await spUpdateItem(key, DB[key]);
+    } catch (e) {
+      if (String(e).startsWith('conflict')) {
+        showNotif('تعارض في البيانات', `تم تعديل "${key}" من مستخدم آخر في نفس الوقت. يُرجى تحديث الصفحة (F5) قبل المتابعة لتفادي فقدان البيانات.`, 'error');
+      } else {
+        showNotif('فشل الحفظ', `تعذر حفظ التغييرات على SharePoint (${key}). تحقق من الاتصال بالإنترنت وحاول مجددًا.`, 'error');
+      }
+    }
+  }
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function confirm(title, message, cb) {
+  document.getElementById('confirm-title').textContent = title;
+  document.getElementById('confirm-message').textContent = message;
+  const btn = document.getElementById('confirm-ok-btn');
+  btn.onclick = () => { cb(); closeModal('modal-confirm'); };
+  openModal('modal-confirm');
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+const pageTitles = {
+  dashboard:'لوحة التحكم', items:'الأصناف', warehouses:'المخازن',
+  categories:'الفئات', receipts:'أذون الإضافة', issues:'أذون الصرف',
+  transfers:'التحويلات', projects:'المشاريع', reports:'التقارير',
+  alerts:'التنبيهات', audit:'سجل النشاط', settings:'الإعدادات', backup:'النسخ الاحتياطي'
+};
+
+function navigate(page) {
+  if (page === 'settings' && !isAdmin) {
+    showNotif('صلاحيات غير كافية', 'صفحة الإعدادات متاحة لأعضاء مجموعة Inventory-Admins فقط', 'warning');
+    return;
+  }
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n=>{ if(n.getAttribute('onclick')&&n.getAttribute('onclick').includes("'"+page+"'")) n.classList.add('active'); });
+  document.getElementById('page-title').textContent = pageTitles[page]||page;
+  if(page==='dashboard') renderDashboard();
+  if(page==='items') renderItems();
+  if(page==='warehouses') renderWarehouses();
+  if(page==='categories') renderCategories();
+  if(page==='receipts') renderReceipts();
+  if(page==='issues') renderIssues();
+  if(page==='transfers') renderTransfers();
+  if(page==='projects') renderProjects();
+  if(page==='reports') renderReports();
+  if(page==='alerts') renderAlerts();
+  if(page==='audit') renderAudit();
+  if(page==='settings') renderSettings();
+  if(page==='backup') renderBackupLog();
+}
+
+function switchTab(prefix, name) {
+  document.querySelectorAll(`[id^="${prefix}-"]`).forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(`${prefix}-${name}`).classList.add('active');
+  event.target.classList.add('active');
+  if(name==='balance') renderBalance();
+  if(name==='project-report') renderProjectReport();
+  if(name==='expiry-report') loadExpiryReport();
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+function renderSettings() {
+  document.getElementById('set-org-name').value = DB.settings.orgName || '';
+  document.getElementById('set-currency').value = DB.settings.currency || 'ج.م';
+  document.getElementById('set-date-format').value = DB.settings.dateFormat || 'DD/MM/YYYY';
+  document.getElementById('set-primary-color').value = DB.settings.primaryColor || '#1a5276';
+  document.getElementById('set-accent-color').value = DB.settings.accentColor || '#d4ac0d';
+  document.getElementById('set-expiry-days').value = DB.settings.expiryWarnDays || 30;
+  document.getElementById('set-username').value = DB.settings.username || 'المدير';
+  document.getElementById('set-username').disabled = true; // identity now comes from Microsoft 365 sign-in
+  updateDatePreview();
+
+  document.getElementById('set-date-format').onchange = updateDatePreview;
+  document.getElementById('set-primary-color').oninput = (e) => setPrimaryColor(e.target.value);
+  document.getElementById('set-accent-color').oninput = (e) => setAccentColor(e.target.value);
+}
+
+function updateDatePreview() {
+  const fmt = document.getElementById('set-date-format').value;
+  const preview = document.getElementById('date-preview');
+  const d = new Date(); const day=String(d.getDate()).padStart(2,'0');
+  const month=String(d.getMonth()+1).padStart(2,'0'); const year=d.getFullYear();
+  preview.value = fmt.replace('DD',day).replace('MM',month).replace('YYYY',year);
+}
+
+function setPrimaryColor(color) {
+  document.documentElement.style.setProperty('--primary', color);
+  document.documentElement.style.setProperty('--bg-sidebar', shadeColor(color,-40));
+  document.documentElement.style.setProperty('--primary-dark', shadeColor(color,-20));
+  document.documentElement.style.setProperty('--primary-light', shadeColor(color,20));
+  document.getElementById('set-primary-color').value = color;
+  document.querySelectorAll('#set-primary-color ~ .color-swatches .swatch').forEach(s=>{ s.classList.toggle('active', s.style.background===color); });
+}
+
+function setAccentColor(color) {
+  document.documentElement.style.setProperty('--accent', color);
+  document.getElementById('set-accent-color').value = color;
+}
+
+function shadeColor(color, percent) {
+  try {
+    let R=parseInt(color.substring(1,3),16), G=parseInt(color.substring(3,5),16), B=parseInt(color.substring(5,7),16);
+    R=Math.max(0,Math.min(255,Math.round(R*(1+percent/100))));
+    G=Math.max(0,Math.min(255,Math.round(G*(1+percent/100))));
+    B=Math.max(0,Math.min(255,Math.round(B*(1+percent/100))));
+    return '#'+R.toString(16).padStart(2,'0')+G.toString(16).padStart(2,'0')+B.toString(16).padStart(2,'0');
+  } catch(e){ return color; }
+}
+
+function saveSettings() {
+  DB.settings.orgName = document.getElementById('set-org-name').value;
+  DB.settings.currency = document.getElementById('set-currency').value;
+  DB.settings.dateFormat = document.getElementById('set-date-format').value;
+  DB.settings.primaryColor = document.getElementById('set-primary-color').value;
+  DB.settings.accentColor = document.getElementById('set-accent-color').value;
+  DB.settings.expiryWarnDays = parseInt(document.getElementById('set-expiry-days').value)||30;
+  DB.settings.username = document.getElementById('set-username').value;
+  applySettings();
+  saveDB();
+  addAuditLog('تعديل الإعدادات', 'تم تعديل إعدادات النظام', 'الإعدادات');
+  showNotif('تم الحفظ', 'تم حفظ الإعدادات بنجاح', 'success');
+}
+
+function applySettings() {
+  if(DB.settings.primaryColor) {
+    setPrimaryColor(DB.settings.primaryColor);
+    setAccentColor(DB.settings.accentColor||'#d4ac0d');
+  }
+  document.getElementById('org-name-display').textContent = DB.settings.orgName || 'نظام المخازن';
+  document.title = (DB.settings.orgName||'نظام إدارة المخازن') + ' - نظام ذكي';
+  document.querySelectorAll('#currency-label, .stat-info .stat-sub').forEach(el=>{ if(el.id==='currency-label') el.textContent=DB.settings.currency; });
+  document.querySelectorAll('.input-addon[id$="-currency"]').forEach(el=>el.textContent=DB.settings.currency);
+}
+
+// ============================================================
+// WAREHOUSES
+// ============================================================
+function openWarehouseModal(id=null) {
+  document.getElementById('wh-code').value = '';
+  document.getElementById('wh-name').value = '';
+  document.getElementById('wh-type').value = 'رئيسي';
+  document.getElementById('wh-manager').value = '';
+  document.getElementById('wh-location').value = '';
+  document.getElementById('wh-notes').value = '';
+  if(id) {
+    const wh = DB.warehouses.find(w=>w.id===id);
+    if(wh) {
+      document.getElementById('wh-code').value = wh.code;
+      document.getElementById('wh-name').value = wh.name;
+      document.getElementById('wh-type').value = wh.type;
+      document.getElementById('wh-manager').value = wh.manager||'';
+      document.getElementById('wh-location').value = wh.location||'';
+      document.getElementById('wh-notes').value = wh.notes||'';
+      document.getElementById('wh-code').dataset.editId = id;
+    }
+  }
+  openModal('modal-warehouse');
+}
+
+function saveWarehouse() {
+  const code = document.getElementById('wh-code').value.trim();
+  const name = document.getElementById('wh-name').value.trim();
+  if(!code||!name) { showNotif('خطأ','يرجى إدخال الكود والاسم','error'); return; }
+  const editId = document.getElementById('wh-code').dataset.editId;
+  if(editId) {
+    const wh = DB.warehouses.find(w=>w.id===editId);
+    if(wh) { wh.code=code; wh.name=name; wh.type=document.getElementById('wh-type').value; wh.manager=document.getElementById('wh-manager').value; wh.location=document.getElementById('wh-location').value; wh.notes=document.getElementById('wh-notes').value; }
+    delete document.getElementById('wh-code').dataset.editId;
+    addAuditLog('تعديل مخزن', `تم تعديل المخزن: ${name}`, 'المخازن');
+  } else {
+    DB.warehouses.push({ id:genId(), code, name, type:document.getElementById('wh-type').value, manager:document.getElementById('wh-manager').value, location:document.getElementById('wh-location').value, notes:document.getElementById('wh-notes').value });
+    addAuditLog('إضافة مخزن', `تم إضافة المخزن: ${name}`, 'المخازن');
+  }
+  saveDB(); closeModal('modal-warehouse'); renderWarehouses();
+  showNotif('تم الحفظ', `تم حفظ المخزن: ${name}`, 'success');
+}
+
+function renderWarehouses() {
+  const tbody = document.getElementById('warehouses-tbody');
+  if(!DB.warehouses.length) { tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏢</div><p>لا توجد مخازن</p></div></td></tr>'; return; }
+  tbody.innerHTML = DB.warehouses.map(wh=>{
+    const count = DB.items.filter(i=>i.warehouseId===wh.id).length;
+    return `<tr>
+      <td><strong>${wh.code}</strong></td>
+      <td>${wh.name}</td>
+      <td><span class="badge badge-info">${wh.type}</span></td>
+      <td>${wh.location||'-'}</td>
+      <td>${wh.manager||'-'}</td>
+      <td>${count} صنف</td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick="openWarehouseModal('${wh.id}')">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteWarehouse('${wh.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function deleteWarehouse(id) {
+  const wh = DB.warehouses.find(w=>w.id===id);
+  confirm('حذف المخزن', `هل تريد حذف المخزن "${wh.name}"؟`, ()=>{
+    DB.warehouses = DB.warehouses.filter(w=>w.id!==id);
+    addAuditLog('حذف مخزن', `تم حذف المخزن: ${wh.name}`, 'المخازن');
+    saveDB(); renderWarehouses(); showNotif('تم الحذف','تم حذف المخزن','warning');
+  });
+}
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+function openCategoryModal(type) {
+  document.getElementById('cat-type').value = type;
+  document.getElementById('cat-name').value = '';
+  document.getElementById('cat-desc').value = '';
+  document.getElementById('cat-modal-title').textContent = type==='main'?'إضافة فئة رئيسية':'إضافة فئة فرعية';
+  const pg = document.getElementById('cat-parent-group');
+  if(type==='sub') {
+    pg.style.display='';
+    const sel = document.getElementById('cat-parent');
+    sel.innerHTML = '<option value="">اختر...</option>' + DB.mainCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  } else { pg.style.display='none'; }
+  openModal('modal-category');
+}
+
+function saveCategory() {
+  const type = document.getElementById('cat-type').value;
+  const name = document.getElementById('cat-name').value.trim();
+  const desc = document.getElementById('cat-desc').value.trim();
+  if(!name) { showNotif('خطأ','يرجى إدخال اسم الفئة','error'); return; }
+  if(type==='main') {
+    DB.mainCategories.push({ id:genId(), name, desc });
+    addAuditLog('إضافة فئة رئيسية', `تم إضافة الفئة: ${name}`, 'الفئات');
+  } else {
+    const parentId = document.getElementById('cat-parent').value;
+    DB.subCategories.push({ id:genId(), name, parentId, desc });
+    addAuditLog('إضافة فئة فرعية', `تم إضافة الفئة: ${name}`, 'الفئات');
+  }
+  saveDB(); closeModal('modal-category'); renderCategories();
+  showNotif('تم','تم حفظ الفئة','success');
+}
+
+function renderCategories() {
+  const mt = document.getElementById('main-cats-tbody');
+  mt.innerHTML = DB.mainCategories.length ? DB.mainCategories.map(c=>{
+    const count = DB.items.filter(i=>i.mainCatId===c.id).length;
+    return `<tr><td><strong>${c.name}</strong></td><td>${c.desc||'-'}</td><td>${count}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteMainCat('${c.id}')">🗑️</button></td></tr>`;
+  }).join('') : '<tr><td colspan="4"><div class="empty-state"><p>لا توجد فئات رئيسية</p></div></td></tr>';
+
+  const st = document.getElementById('sub-cats-tbody');
+  st.innerHTML = DB.subCategories.length ? DB.subCategories.map(c=>{
+    const parent = DB.mainCategories.find(m=>m.id===c.parentId);
+    return `<tr><td>${c.name}</td><td>${parent?parent.name:'-'}</td>
+    <td><button class="btn btn-sm btn-danger" onclick="deleteSubCat('${c.id}')">🗑️</button></td></tr>`;
+  }).join('') : '<tr><td colspan="3"><div class="empty-state"><p>لا توجد فئات فرعية</p></div></td></tr>';
+}
+
+function deleteMainCat(id) {
+  const c = DB.mainCategories.find(x=>x.id===id);
+  DB.mainCategories = DB.mainCategories.filter(x=>x.id!==id);
+  DB.subCategories = DB.subCategories.filter(x=>x.parentId!==id);
+  addAuditLog('حذف فئة', `تم حذف الفئة: ${c.name}`, 'الفئات');
+  saveDB(); renderCategories();
+}
+
+function deleteSubCat(id) {
+  DB.subCategories = DB.subCategories.filter(x=>x.id!==id);
+  saveDB(); renderCategories();
+}
+
+// ============================================================
+// ITEMS
+// ============================================================
+function populateSelects() {
+  // Main cats
+  const mc = document.getElementById('item-main-cat');
+  if(mc) mc.innerHTML = '<option value="">اختر...</option>' + DB.mainCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  // Warehouses
+  const wh = document.getElementById('item-warehouse');
+  if(wh) wh.innerHTML = '<option value="">اختر...</option>' + DB.warehouses.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  // Cat filter
+  const cf = document.getElementById('item-cat-filter');
+  if(cf) cf.innerHTML = '<option value="">كل الفئات</option>' + DB.mainCategories.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  // WH filter
+  const wf = document.getElementById('item-wh-filter');
+  if(wf) wf.innerHTML = '<option value="">كل المخازن</option>' + DB.warehouses.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  // Item cost currency
+  document.querySelectorAll('.input-addon[id$="-currency"]').forEach(el=>el.textContent=DB.settings.currency);
+  // Issue project
+  const ip = document.getElementById('iss-project');
+  if(ip) ip.innerHTML = '<option value="">بدون مشروع</option>' + DB.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  // Issue project filter
+  const ipf = document.getElementById('issue-project-filter');
+  if(ipf) ipf.innerHTML = '<option value="">كل المشاريع</option>' + DB.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  // History item select
+  const his = document.getElementById('history-item-select');
+  if(his) his.innerHTML = '<option value="">اختر الصنف...</option>' + DB.items.map(i=>`<option value="${i.id}">${i.name} (${i.code})</option>`).join('');
+}
+
+function updateSubCats() {
+  const mainId = document.getElementById('item-main-cat').value;
+  const sc = document.getElementById('item-sub-cat');
+  const subs = DB.subCategories.filter(s=>s.parentId===mainId);
+  sc.innerHTML = '<option value="">اختر...</option>' + subs.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+}
+
+function openItemModal(id=null) {
+  populateSelects();
+  document.getElementById('item-modal-title').textContent = id?'تعديل صنف':'إضافة صنف جديد';
+  ['item-name','item-code','item-barcode','item-notes'].forEach(f=>document.getElementById(f).value='');
+  document.getElementById('item-unit').value='قطعة';
+  document.getElementById('item-cost').value=0;
+  document.getElementById('item-initial').value=0;
+  document.getElementById('item-reorder').value=0;
+  document.getElementById('item-main-cat').value='';
+  document.getElementById('item-sub-cat').innerHTML='<option value="">اختر...</option>';
+  document.getElementById('item-warehouse').value='';
+  document.getElementById('item-name').dataset.editId='';
+  document.getElementById('item-cost-currency').textContent = DB.settings.currency;
+
+  if(id) {
+    const item = DB.items.find(i=>i.id===id);
+    if(item) {
+      document.getElementById('item-name').value=item.name;
+      document.getElementById('item-code').value=item.code;
+      document.getElementById('item-barcode').value=item.barcode||'';
+      document.getElementById('item-unit').value=item.unit;
+      document.getElementById('item-cost').value=item.cost;
+      document.getElementById('item-initial').value=item.stock;
+      document.getElementById('item-reorder').value=item.reorderPoint||0;
+      document.getElementById('item-notes').value=item.notes||'';
+      document.getElementById('item-main-cat').value=item.mainCatId||'';
+      updateSubCats();
+      document.getElementById('item-sub-cat').value=item.subCatId||'';
+      document.getElementById('item-warehouse').value=item.warehouseId||'';
+      document.getElementById('item-name').dataset.editId=id;
+    }
+  }
+  openModal('modal-item');
+}
+
+function saveItem() {
+  const name = document.getElementById('item-name').value.trim();
+  const code = document.getElementById('item-code').value.trim();
+  const warehouseId = document.getElementById('item-warehouse').value;
+  const unit = document.getElementById('item-unit').value;
+  if(!name||!code||!warehouseId) { showNotif('خطأ','يرجى ملء الحقول المطلوبة','error'); return; }
+
+  const editId = document.getElementById('item-name').dataset.editId;
+  const data = {
+    name, code,
+    barcode: document.getElementById('item-barcode').value.trim(),
+    mainCatId: document.getElementById('item-main-cat').value,
+    subCatId: document.getElementById('item-sub-cat').value,
+    warehouseId, unit,
+    cost: parseFloat(document.getElementById('item-cost').value)||0,
+    stock: parseFloat(document.getElementById('item-initial').value)||0,
+    reorderPoint: parseFloat(document.getElementById('item-reorder').value)||0,
+    notes: document.getElementById('item-notes').value
+  };
+
+  if(editId) {
+    const idx = DB.items.findIndex(i=>i.id===editId);
+    if(idx>=0) DB.items[idx] = {...DB.items[idx],...data};
+    addAuditLog('تعديل صنف', `تم تعديل: ${name}`, 'الأصناف');
+  } else {
+    DB.items.push({ id:genId(), ...data });
+    addAuditLog('إضافة صنف', `تم إضافة: ${name} (${code})`, 'الأصناف');
+  }
+  saveDB(); closeModal('modal-item'); renderItems();
+  showNotif('تم','تم حفظ الصنف بنجاح','success');
+}
+
+function renderItems(filter='', catId='', whId='') {
+  populateSelects();
+  const f = (filter||document.getElementById('item-search')?.value||'').toLowerCase();
+  const cf = catId||document.getElementById('item-cat-filter')?.value||'';
+  const wf = whId||document.getElementById('item-wh-filter')?.value||'';
+  const tbody = document.getElementById('items-tbody');
+  const items = DB.items.filter(i=>{
+    const mc = DB.mainCategories.find(c=>c.id===i.mainCatId);
+    const txt = `${i.name} ${i.code} ${i.barcode||''} ${mc?.name||''}`.toLowerCase();
+    return (!f||txt.includes(f)) && (!cf||i.mainCatId===cf) && (!wf||i.warehouseId===wf);
+  });
+  if(!items.length) { tbody.innerHTML='<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📦</div><p>لا توجد أصناف</p></div></td></tr>'; return; }
+  tbody.innerHTML = items.map(item=>{
+    const mc = DB.mainCategories.find(c=>c.id===item.mainCatId);
+    const wh = DB.warehouses.find(w=>w.id===item.warehouseId);
+    const low = item.stock <= item.reorderPoint && item.reorderPoint>0;
+    const badge = low ? '<span class="badge badge-warning">⚠️ منخفض</span>' : '<span class="badge badge-success">✅ طبيعي</span>';
+    return `<tr>
+      <td><strong>${item.code}</strong></td>
+      <td>${item.barcode||'-'}</td>
+      <td><a href="#" onclick="showItemDetail('${item.id}');return false;" style="color:var(--primary);font-weight:600">${item.name}</a></td>
+      <td>${mc?mc.name:'-'}</td>
+      <td>${item.unit}</td>
+      <td><strong>${item.stock}</strong></td>
+      <td>${formatCurrency(item.cost)}</td>
+      <td>${item.reorderPoint||0}</td>
+      <td>${badge}</td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick="openItemModal('${item.id}')">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteItem('${item.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterItems(val) { renderItems(val); }
+
+function deleteItem(id) {
+  const item = DB.items.find(i=>i.id===id);
+  confirm('حذف الصنف', `هل تريد حذف "${item.name}"؟`, ()=>{
+    DB.items = DB.items.filter(i=>i.id!==id);
+    addAuditLog('حذف صنف', `تم حذف: ${item.name}`, 'الأصناف');
+    saveDB(); renderItems(); showNotif('تم الحذف','تم حذف الصنف','warning');
+  });
+}
+
+function showItemDetail(id) {
+  const item = DB.items.find(i=>i.id===id);
+  if(!item) return;
+  const mc = DB.mainCategories.find(c=>c.id===item.mainCatId);
+  const sc = DB.subCategories.find(c=>c.id===item.subCatId);
+  const wh = DB.warehouses.find(w=>w.id===item.warehouseId);
+  const mvs = DB.movements.filter(m=>m.itemId===id);
+  document.getElementById('detail-title').textContent = `كارت الصنف: ${item.name}`;
+  document.getElementById('item-detail-body').innerHTML = `
+    <div class="form-grid mb-3">
+      <div class="p-3 bg-light rounded"><strong>الكود:</strong> ${item.code}</div>
+      <div class="p-3 bg-light rounded"><strong>الباركود:</strong> ${item.barcode||'-'}</div>
+      <div class="p-3 bg-light rounded"><strong>الفئة:</strong> ${mc?mc.name:'-'} ${sc?'/ '+sc.name:''}</div>
+      <div class="p-3 bg-light rounded"><strong>المخزن:</strong> ${wh?wh.name:'-'}</div>
+      <div class="p-3 bg-light rounded"><strong>الرصيد الحالي:</strong> <span style="font-size:18px;font-weight:800;color:var(--primary)">${item.stock} ${item.unit}</span></div>
+      <div class="p-3 bg-light rounded"><strong>قيمة المخزون:</strong> ${formatCurrency(item.stock*item.cost)}</div>
+      <div class="p-3 bg-light rounded"><strong>سعر التكلفة:</strong> ${formatCurrency(item.cost)}</div>
+      <div class="p-3 bg-light rounded"><strong>نقطة إعادة الطلب:</strong> ${item.reorderPoint||0} ${item.unit}</div>
+    </div>
+    <div class="separator"></div>
+    <strong style="font-size:14px">📜 سجل الحركات (كارت الصنف)</strong>
+    <div class="table-wrapper mt-2">
+      <table>
+        <thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>رقم الإذن</th><th>وارد</th><th>صادر</th><th>الرصيد</th><th>الجهة</th></tr></thead>
+        <tbody>
+          ${mvs.length ? mvs.map(m=>`<tr>
+            <td>${formatDate(m.date)}</td>
+            <td><span class="badge ${m.type==='إضافة'?'badge-success':'badge-warning'}">${m.type}</span></td>
+            <td>${m.refNo||'-'}</td>
+            <td>${m.in||'-'}</td>
+            <td>${m.out||'-'}</td>
+            <td>${m.balance||'-'}</td>
+            <td>${m.party||'-'}</td>
+          </tr>`).join('') : '<tr><td colspan="7" class="text-center text-muted">لا توجد حركات</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+  openModal('modal-item-detail');
+}
+
+// ============================================================
+// RECEIPTS
+// ============================================================
+function openReceiptModal() {
+  populateSelects();
+  const num = 'REC-' + String(DB.counters.receipt).padStart(4,'0');
+  document.getElementById('rec-number').value = num;
+  document.getElementById('rec-date').value = today();
+  document.getElementById('rec-supplier').value='';
+  document.getElementById('rec-invoice').value='';
+  document.getElementById('rec-p1').value='';
+  document.getElementById('rec-p2').value='';
+  document.getElementById('rec-p3').value='';
+  document.getElementById('rec-decision').value='';
+  document.getElementById('rec-committee-notes').value='';
+  document.getElementById('rec-notes').value='';
+  const whSel = document.getElementById('rec-warehouse');
+  whSel.innerHTML = '<option value="">اختر...</option>' + DB.warehouses.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  document.getElementById('rec-lines').innerHTML='';
+  addReceiptLine();
+  openModal('modal-receipt');
+}
+
+function addReceiptLine() {
+  const itemOptions = DB.items.map(i=>`<option value="${i.id}" data-unit="${i.unit}" data-cost="${i.cost}">${i.name} (${i.code}) - متاح: ${i.stock}</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="rec-item-sel" onchange="fillRecCost(this)">${'<option value="">اختر...</option>'+itemOptions}</select></td>
+    <td><input type="number" class="rec-qty" value="1" min="1" style="width:80px"></td>
+    <td><input type="number" class="rec-price" value="0" min="0" step="0.01" style="width:100px"></td>
+    <td><input type="date" class="rec-prod-date"></td>
+    <td><input type="date" class="rec-exp-date"></td>
+    <td><input type="text" class="rec-batch" placeholder="رقم الدفعة" style="width:100px"></td>
+    <td><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">🗑️</button></td>`;
+  document.getElementById('rec-lines').appendChild(tr);
+}
+
+function fillRecCost(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const cost = opt.getAttribute('data-cost')||0;
+  sel.closest('tr').querySelector('.rec-price').value=cost;
+}
+
+function saveReceipt() {
+  const warehouseId = document.getElementById('rec-warehouse').value;
+  const p1 = document.getElementById('rec-p1').value.trim();
+  const p2 = document.getElementById('rec-p2').value.trim();
+  const p3 = document.getElementById('rec-p3').value.trim();
+  const decision = document.getElementById('rec-decision').value;
+  if(!warehouseId) { showNotif('خطأ','يرجى اختيار المخزن','error'); return; }
+  if(!p1||!p2||!p3) { showNotif('خطأ','يرجى إدخال بيانات لجنة الفحص الثلاثية','error'); return; }
+  if(!decision) { showNotif('خطأ','يرجى تحديد قرار اللجنة','error'); return; }
+
+  const lines = [];
+  document.querySelectorAll('#rec-lines tr').forEach(tr=>{
+    const itemId = tr.querySelector('.rec-item-sel').value;
+    const qty = parseFloat(tr.querySelector('.rec-qty').value)||0;
+    const price = parseFloat(tr.querySelector('.rec-price').value)||0;
+    const prodDate = tr.querySelector('.rec-prod-date').value;
+    const expDate = tr.querySelector('.rec-exp-date').value;
+    const batch = tr.querySelector('.rec-batch').value;
+    if(itemId && qty>0) lines.push({itemId, qty, price, prodDate, expDate, batch});
+  });
+  if(!lines.length) { showNotif('خطأ','يرجى إضافة صنف واحد على الأقل','error'); return; }
+
+  const refNo = document.getElementById('rec-number').value;
+  const date = document.getElementById('rec-date').value;
+  const rec = {
+    id:genId(), refNo, date, warehouseId,
+    supplier: document.getElementById('rec-supplier').value,
+    invoice: document.getElementById('rec-invoice').value,
+    committee: { p1, p2, p3, decision, notes: document.getElementById('rec-committee-notes').value },
+    lines, notes: document.getElementById('rec-notes').value
+  };
+  DB.receipts.push(rec);
+  DB.counters.receipt++;
+
+  if(decision !== 'مرفوض') {
+    lines.forEach(l=>{
+      const item = DB.items.find(i=>i.id===l.itemId);
+      if(item) {
+        const newBalance = item.stock + l.qty;
+        DB.movements.push({ id:genId(), itemId:l.itemId, date, type:'إضافة', refNo, in:l.qty, out:null, balance:newBalance, party:rec.supplier||'مورد', batch:l.batch, prodDate:l.prodDate, expDate:l.expDate, warehouseId });
+        item.stock = newBalance;
+        if(l.price>0) item.cost = l.price;
+      }
+    });
+  }
+
+  addAuditLog('إذن إضافة', `${refNo} - ${lines.length} أصناف - قرار اللجنة: ${decision}`, 'الإضافة');
+  saveDB(); closeModal('modal-receipt'); renderReceipts();
+  showNotif('تم الحفظ', `تم حفظ ${refNo}`, 'success');
+}
+
+function renderReceipts(filter='') {
+  const f = filter.toLowerCase();
+  const sf = document.getElementById('receipt-status-filter')?.value||'';
+  const df = document.getElementById('receipt-date-filter')?.value||'';
+  const tbody = document.getElementById('receipts-tbody');
+  const recs = DB.receipts.filter(r=>{
+    const txt = `${r.refNo} ${r.supplier||''}`.toLowerCase();
+    return (!f||txt.includes(f)) && (!sf||r.committee.decision===sf) && (!df||r.date===df);
+  });
+  if(!recs.length) { tbody.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📥</div><p>لا توجد أذون إضافة</p></div></td></tr>'; return; }
+  const badges = { 'مقبول':'badge-success', 'مرفوض':'badge-danger', 'مقبول تحفظياً':'badge-warning' };
+  tbody.innerHTML = [...recs].reverse().map(r=>{
+    const wh = DB.warehouses.find(w=>w.id===r.warehouseId);
+    return `<tr>
+      <td><strong>${r.refNo}</strong></td>
+      <td>${formatDate(r.date)}</td>
+      <td>${wh?wh.name:'-'}</td>
+      <td>${r.lines.length} صنف</td>
+      <td>${r.supplier||'-'}</td>
+      <td><span class="badge ${badges[r.committee.decision]||'badge-secondary'}">${r.committee.decision}</span></td>
+      <td style="font-size:11px">${r.committee.p1} / ${r.committee.p2} / ${r.committee.p3}</td>
+      <td><button class="btn btn-sm btn-outline" onclick="viewReceipt('${r.id}')">👁️ عرض</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterReceipts(val) { renderReceipts(val||''); }
+
+function viewReceipt(id) {
+  const r = DB.receipts.find(x=>x.id===id);
+  if(!r) return;
+  const wh = DB.warehouses.find(w=>w.id===r.warehouseId);
+  const badges = { 'مقبول':'badge-success', 'مرفوض':'badge-danger', 'مقبول تحفظياً':'badge-warning' };
+  let html = `<div class="form-grid mb-3">
+    <div><strong>رقم الإذن:</strong> ${r.refNo}</div>
+    <div><strong>التاريخ:</strong> ${formatDate(r.date)}</div>
+    <div><strong>المخزن:</strong> ${wh?wh.name:'-'}</div>
+    <div><strong>المورد:</strong> ${r.supplier||'-'}</div>
+    <div><strong>رقم الفاتورة:</strong> ${r.invoice||'-'}</div>
+    <div><strong>قرار اللجنة:</strong> <span class="badge ${badges[r.committee.decision]||''}">${r.committee.decision}</span></div>
+  </div>
+  <div class="alert alert-info"><strong>لجنة الفحص:</strong> ${r.committee.p1} | ${r.committee.p2} | ${r.committee.p3}<br>${r.committee.notes?'ملاحظات: '+r.committee.notes:''}</div>
+  <div class="table-wrapper"><table><thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>تاريخ الإنتاج</th><th>تاريخ الانتهاء</th><th>الدفعة</th></tr></thead><tbody>
+  ${r.lines.map(l=>{ const item=DB.items.find(i=>i.id===l.itemId); return `<tr><td>${item?item.name:'?'}</td><td>${l.qty} ${item?item.unit:''}</td><td>${formatCurrency(l.price)}</td><td>${formatDate(l.prodDate)||'-'}</td><td>${formatDate(l.expDate)||'-'}</td><td>${l.batch||'-'}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+  document.getElementById('detail-title').textContent = `إذن إضافة: ${r.refNo}`;
+  document.getElementById('item-detail-body').innerHTML = html;
+  openModal('modal-item-detail');
+}
+
+// ============================================================
+// ISSUES
+// ============================================================
+function openIssueModal() {
+  populateSelects();
+  const num = 'ISS-' + String(DB.counters.issue).padStart(4,'0');
+  document.getElementById('iss-number').value = num;
+  document.getElementById('iss-date').value = today();
+  document.getElementById('iss-receiver').value='';
+  document.getElementById('iss-purpose').value='';
+  document.getElementById('iss-notes').value='';
+  const wh = document.getElementById('iss-warehouse');
+  wh.innerHTML = '<option value="">اختر...</option>' + DB.warehouses.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  document.getElementById('iss-lines').innerHTML='';
+  addIssueLine();
+  openModal('modal-issue');
+}
+
+function addIssueLine() {
+  const itemOptions = DB.items.map(i=>`<option value="${i.id}" data-stock="${i.stock}" data-unit="${i.unit}">${i.name} (${i.code})</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="iss-item-sel" onchange="fillIssStock(this)">${'<option value="">اختر...</option>'+itemOptions}</select></td>
+    <td><span class="iss-avail">-</span></td>
+    <td><input type="number" class="iss-qty" value="1" min="1" style="width:80px"></td>
+    <td><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">🗑️</button></td>`;
+  document.getElementById('iss-lines').appendChild(tr);
+}
+
+function fillIssStock(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  const stock = opt.getAttribute('data-stock')||0;
+  const unit = opt.getAttribute('data-unit')||'';
+  sel.closest('tr').querySelector('.iss-avail').textContent = `${stock} ${unit}`;
+  sel.closest('tr').querySelector('.iss-qty').max = stock;
+}
+
+function saveIssue() {
+  const warehouseId = document.getElementById('iss-warehouse').value;
+  const receiver = document.getElementById('iss-receiver').value.trim();
+  if(!warehouseId||!receiver) { showNotif('خطأ','يرجى ملء الحقول المطلوبة','error'); return; }
+
+  const lines = [];
+  let valid = true;
+  document.querySelectorAll('#iss-lines tr').forEach(tr=>{
+    const sel = tr.querySelector('.iss-item-sel');
+    const itemId = sel.value;
+    const qty = parseFloat(tr.querySelector('.iss-qty').value)||0;
+    if(itemId && qty>0) {
+      const item = DB.items.find(i=>i.id===itemId);
+      if(item && qty > item.stock) { showNotif('خطأ',`الكمية المطلوبة من "${item.name}" أكبر من الرصيد المتاح (${item.stock})`,'error'); valid=false; return; }
+      lines.push({itemId, qty});
+    }
+  });
+  if(!valid) return;
+  if(!lines.length) { showNotif('خطأ','يرجى إضافة صنف واحد على الأقل','error'); return; }
+
+  const refNo = document.getElementById('iss-number').value;
+  const date = document.getElementById('iss-date').value;
+  const projectId = document.getElementById('iss-project').value;
+  const iss = {
+    id:genId(), refNo, date, warehouseId, receiver,
+    projectId, purpose:document.getElementById('iss-purpose').value,
+    lines, notes:document.getElementById('iss-notes').value
+  };
+  DB.issues.push(iss);
+  DB.counters.issue++;
+
+  lines.forEach(l=>{
+    const item = DB.items.find(i=>i.id===l.itemId);
+    if(item) {
+      item.stock -= l.qty;
+      const proj = DB.projects.find(p=>p.id===projectId);
+      DB.movements.push({ id:genId(), itemId:l.itemId, date, type:'صرف', refNo, in:null, out:l.qty, balance:item.stock, party:receiver+(proj?' / '+proj.name:''), warehouseId, projectId });
+    }
+  });
+
+  addAuditLog('إذن صرف', `${refNo} - ${receiver} - ${lines.length} أصناف`, 'الصرف');
+  saveDB(); closeModal('modal-issue'); renderIssues();
+  showNotif('تم','تم حفظ إذن الصرف','success');
+}
+
+function renderIssues(filter='') {
+  const f = filter.toLowerCase();
+  const pf = document.getElementById('issue-project-filter')?.value||'';
+  const df = document.getElementById('issue-date-filter')?.value||'';
+  const tbody = document.getElementById('issues-tbody');
+  const recs = DB.issues.filter(r=>{
+    const proj = DB.projects.find(p=>p.id===r.projectId);
+    const txt = `${r.refNo} ${r.receiver} ${proj?proj.name:''}`.toLowerCase();
+    return (!f||txt.includes(f)) && (!pf||r.projectId===pf) && (!df||r.date===df);
+  });
+  if(!recs.length) { tbody.innerHTML='<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📤</div><p>لا توجد أذون صرف</p></div></td></tr>'; return; }
+  tbody.innerHTML = [...recs].reverse().map(r=>{
+    const wh = DB.warehouses.find(w=>w.id===r.warehouseId);
+    const proj = DB.projects.find(p=>p.id===r.projectId);
+    return `<tr>
+      <td><strong>${r.refNo}</strong></td>
+      <td>${formatDate(r.date)}</td>
+      <td>${wh?wh.name:'-'}</td>
+      <td>${r.receiver}</td>
+      <td>${proj?`<span class="badge badge-info">${proj.name}</span>`:'-'}</td>
+      <td>${r.lines.length} صنف</td>
+      <td><button class="btn btn-sm btn-outline" onclick="viewIssue('${r.id}')">👁️ عرض</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterIssues(val) { renderIssues(val||''); }
+
+function viewIssue(id) {
+  const r = DB.issues.find(x=>x.id===id);
+  if(!r) return;
+  const wh = DB.warehouses.find(w=>w.id===r.warehouseId);
+  const proj = DB.projects.find(p=>p.id===r.projectId);
+  let html = `<div class="form-grid mb-3">
+    <div><strong>رقم الإذن:</strong> ${r.refNo}</div>
+    <div><strong>التاريخ:</strong> ${formatDate(r.date)}</div>
+    <div><strong>المخزن:</strong> ${wh?wh.name:'-'}</div>
+    <div><strong>المستلم:</strong> ${r.receiver}</div>
+    <div><strong>المشروع:</strong> ${proj?proj.name:'-'}</div>
+    <div><strong>الغرض:</strong> ${r.purpose||'-'}</div>
+  </div>
+  <div class="table-wrapper"><table><thead><tr><th>الصنف</th><th>الكمية المصروفة</th><th>وحدة القياس</th><th>التكلفة</th></tr></thead><tbody>
+  ${r.lines.map(l=>{ const item=DB.items.find(i=>i.id===l.itemId); return `<tr><td>${item?item.name:'?'}</td><td>${l.qty}</td><td>${item?item.unit:''}</td><td>${formatCurrency((item?item.cost:0)*l.qty)}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+  document.getElementById('detail-title').textContent = `إذن صرف: ${r.refNo}`;
+  document.getElementById('item-detail-body').innerHTML = html;
+  openModal('modal-item-detail');
+}
+
+// ============================================================
+// TRANSFERS
+// ============================================================
+function openTransferModal() {
+  const num = 'TR-' + String(DB.counters.transfer).padStart(4,'0');
+  document.getElementById('tr-number').value = num;
+  document.getElementById('tr-date').value = today();
+  document.getElementById('tr-reason').value='';
+  const from = document.getElementById('tr-from');
+  const to = document.getElementById('tr-to');
+  const opts = '<option value="">اختر...</option>' + DB.warehouses.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');
+  from.innerHTML=opts; to.innerHTML=opts;
+  document.getElementById('tr-lines').innerHTML='';
+  addTransferLine();
+  openModal('modal-transfer');
+}
+
+function addTransferLine() {
+  const itemOptions = DB.items.map(i=>`<option value="${i.id}" data-stock="${i.stock}" data-unit="${i.unit}">${i.name} (${i.code})</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><select class="tr-item-sel" onchange="this.closest('tr').querySelector('.tr-avail').textContent=this.options[this.selectedIndex].getAttribute('data-stock')+' '+this.options[this.selectedIndex].getAttribute('data-unit')">${'<option value="">اختر...</option>'+itemOptions}</select></td>
+    <td><span class="tr-avail">-</span></td>
+    <td><input type="number" class="tr-qty" value="1" min="1" style="width:80px"></td>
+    <td><button class="btn btn-sm btn-danger" onclick="this.closest('tr').remove()">🗑️</button></td>`;
+  document.getElementById('tr-lines').appendChild(tr);
+}
+
+function saveTransfer() {
+  const fromId = document.getElementById('tr-from').value;
+  const toId = document.getElementById('tr-to').value;
+  if(!fromId||!toId) { showNotif('خطأ','يرجى اختيار المخازن','error'); return; }
+  if(fromId===toId) { showNotif('خطأ','لا يمكن التحويل من وإلى نفس المخزن','error'); return; }
+
+  const lines = [];
+  document.querySelectorAll('#tr-lines tr').forEach(tr=>{
+    const itemId = tr.querySelector('.tr-item-sel').value;
+    const qty = parseFloat(tr.querySelector('.tr-qty').value)||0;
+    if(itemId && qty>0) {
+      const item = DB.items.find(i=>i.id===itemId);
+      if(item && qty>item.stock) { showNotif('خطأ',`كمية غير كافية من "${item.name}"`,'error'); return; }
+      lines.push({itemId, qty});
+    }
+  });
+  if(!lines.length) return;
+
+  const refNo = document.getElementById('tr-number').value;
+  const date = document.getElementById('tr-date').value;
+  const fromWh = DB.warehouses.find(w=>w.id===fromId);
+  const toWh = DB.warehouses.find(w=>w.id===toId);
+
+  DB.transfers.push({ id:genId(), refNo, date, fromId, toId, lines, reason:document.getElementById('tr-reason').value, status:'منجز' });
+  DB.counters.transfer++;
+
+  lines.forEach(l=>{
+    const item = DB.items.find(i=>i.id===l.itemId);
+    if(item) {
+      item.stock -= l.qty;
+      DB.movements.push({ id:genId(), itemId:l.itemId, date, type:'تحويل صادر', refNo, in:null, out:l.qty, balance:item.stock, party:`إلى: ${toWh.name}`, warehouseId:fromId });
+      item.stock += l.qty;
+      DB.movements.push({ id:genId(), itemId:l.itemId, date, type:'تحويل وارد', refNo, in:l.qty, out:null, balance:item.stock, party:`من: ${fromWh.name}`, warehouseId:toId });
+    }
+  });
+
+  addAuditLog('تحويل', `${refNo}: من ${fromWh.name} إلى ${toWh.name}`, 'التحويلات');
+  saveDB(); closeModal('modal-transfer'); renderTransfers();
+  showNotif('تم','تم تنفيذ التحويل','success');
+}
+
+function renderTransfers() {
+  const tbody = document.getElementById('transfers-tbody');
+  if(!DB.transfers.length) { tbody.innerHTML='<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🔄</div><p>لا توجد تحويلات</p></div></td></tr>'; return; }
+  tbody.innerHTML = [...DB.transfers].reverse().map(r=>{
+    const from = DB.warehouses.find(w=>w.id===r.fromId);
+    const to = DB.warehouses.find(w=>w.id===r.toId);
+    return `<tr>
+      <td><strong>${r.refNo}</strong></td>
+      <td>${formatDate(r.date)}</td>
+      <td>${from?from.name:'-'}</td>
+      <td>${to?to.name:'-'}</td>
+      <td>${r.lines.length}</td>
+      <td><span class="badge badge-success">${r.status}</span></td>
+      <td>${DB.settings.username}</td>
+      <td><button class="btn btn-sm btn-outline">👁️ عرض</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// PROJECTS
+// ============================================================
+function openProjectModal() {
+  ['proj-code','proj-name','proj-manager','proj-notes'].forEach(f=>document.getElementById(f).value='');
+  document.getElementById('proj-status').value='نشط';
+  openModal('modal-project');
+}
+
+function saveProject() {
+  const code = document.getElementById('proj-code').value.trim();
+  const name = document.getElementById('proj-name').value.trim();
+  if(!code||!name) { showNotif('خطأ','يرجى إدخال الكود والاسم','error'); return; }
+  DB.projects.push({ id:genId(), code, name, manager:document.getElementById('proj-manager').value, status:document.getElementById('proj-status').value, notes:document.getElementById('proj-notes').value });
+  addAuditLog('إضافة مشروع', `تم إضافة المشروع: ${name}`, 'المشاريع');
+  saveDB(); closeModal('modal-project'); renderProjects();
+  showNotif('تم','تم حفظ المشروع','success');
+}
+
+function renderProjects() {
+  const tbody = document.getElementById('projects-tbody');
+  if(!DB.projects.length) { tbody.innerHTML='<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🏗️</div><p>لا توجد مشاريع</p></div></td></tr>'; return; }
+  tbody.innerHTML = DB.projects.map(p=>{
+    const total = DB.issues.filter(i=>i.projectId===p.id).reduce((sum,i)=>sum+i.lines.reduce((s,l)=>{ const item=DB.items.find(x=>x.id===l.itemId); return s+(item?l.qty*item.cost:0); },0),0);
+    const badges = {نشط:'badge-success',منتهي:'badge-secondary',متوقف:'badge-warning'};
+    return `<tr>
+      <td><strong>${p.code}</strong></td>
+      <td>${p.name}</td>
+      <td>${p.manager||'-'}</td>
+      <td><span class="badge ${badges[p.status]||'badge-secondary'}">${p.status}</span></td>
+      <td>${formatCurrency(total)}</td>
+      <td>
+        <button class="btn btn-sm btn-danger" onclick="deleteProject('${p.id}')">🗑️</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function deleteProject(id) {
+  const p = DB.projects.find(x=>x.id===id);
+  confirm('حذف المشروع', `هل تريد حذف "${p.name}"؟`, ()=>{
+    DB.projects = DB.projects.filter(x=>x.id!==id);
+    saveDB(); renderProjects();
+  });
+}
+
+// ============================================================
+// REPORTS
+// ============================================================
+function renderReports() { renderBalance(); }
+
+function renderBalance() {
+  const tbody = document.getElementById('balance-tbody');
+  tbody.innerHTML = DB.items.map(item=>{
+    const mc = DB.mainCategories.find(c=>c.id===item.mainCatId);
+    const wh = DB.warehouses.find(w=>w.id===item.warehouseId);
+    return `<tr>
+      <td>${item.code}</td>
+      <td>${item.name}</td>
+      <td>${mc?mc.name:'-'}</td>
+      <td><strong>${item.stock}</strong></td>
+      <td>${item.unit}</td>
+      <td>${formatCurrency(item.cost)}</td>
+      <td><strong>${formatCurrency(item.stock*item.cost)}</strong></td>
+      <td>${wh?wh.name:'-'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="text-center text-muted">لا توجد أصناف</td></tr>';
+}
+
+function renderProjectReport() {
+  const tbody = document.getElementById('project-report-tbody');
+  const rows = [];
+  DB.issues.forEach(iss=>{
+    const proj = DB.projects.find(p=>p.id===iss.projectId);
+    iss.lines.forEach(l=>{
+      const item = DB.items.find(i=>i.id===l.itemId);
+      rows.push({ projName:proj?proj.name:'بدون مشروع', itemName:item?item.name:'?', qty:l.qty, unit:item?item.unit:'', cost:(item?item.cost:0)*l.qty });
+    });
+  });
+  tbody.innerHTML = rows.length ? rows.map(r=>`<tr><td>${r.projName}</td><td>${r.itemName}</td><td>${r.qty}</td><td>${r.unit}</td><td>${formatCurrency(r.cost)}</td></tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">لا توجد بيانات</td></tr>';
+}
+
+function loadItemHistory() {
+  const itemId = document.getElementById('history-item-select').value;
+  const from = document.getElementById('history-from').value;
+  const to = document.getElementById('history-to').value;
+  const tbody = document.getElementById('history-tbody');
+  if(!itemId) { tbody.innerHTML=''; return; }
+  let mvs = DB.movements.filter(m=>m.itemId===itemId);
+  if(from) mvs = mvs.filter(m=>m.date>=from);
+  if(to) mvs = mvs.filter(m=>m.date<=to);
+  tbody.innerHTML = mvs.length ? mvs.map(m=>`<tr>
+    <td>${formatDate(m.date)}</td>
+    <td><span class="badge ${m.type.includes('صادر')||m.type==='صرف'?'badge-warning':'badge-success'}">${m.type}</span></td>
+    <td>${m.refNo||'-'}</td>
+    <td>${m.in||'-'}</td>
+    <td>${m.out||'-'}</td>
+    <td>${m.balance}</td>
+    <td>${m.party||'-'}</td>
+    <td>${DB.settings.username}</td>
+  </tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted">لا توجد حركات</td></tr>';
+}
+
+function loadExpiryReport() {
+  const days = parseInt(document.getElementById('expiry-days')?.value)||30;
+  const now = new Date(); const cutoff = new Date(); cutoff.setDate(now.getDate()+days);
+  const tbody = document.getElementById('expiry-tbody');
+  const rows = [];
+  DB.movements.forEach(m=>{
+    if(!m.expDate) return;
+    const exp = new Date(m.expDate);
+    const daysLeft = Math.ceil((exp-now)/(1000*60*60*24));
+    if(daysLeft <= days) {
+      const item = DB.items.find(i=>i.id===m.itemId);
+      const wh = DB.warehouses.find(w=>w.id===m.warehouseId);
+      const status = daysLeft<0?'منتهي الصلاحية':daysLeft<=7?'حرج جداً':daysLeft<=30?'قارب الانتهاء':'تحذير';
+      const badgeClass = daysLeft<0?'badge-danger':daysLeft<=7?'badge-danger':daysLeft<=30?'badge-warning':'badge-info';
+      rows.push({ item:item?item.name:'?', batch:m.batch||'-', prodDate:m.prodDate, expDate:m.expDate, daysLeft, qty:m.in||0, wh:wh?wh.name:'-', status, badgeClass });
+    }
+  });
+  tbody.innerHTML = rows.length ? rows.sort((a,b)=>a.daysLeft-b.daysLeft).map(r=>`<tr>
+    <td>${r.item}</td><td>${r.batch}</td>
+    <td>${formatDate(r.prodDate)||'-'}</td>
+    <td>${formatDate(r.expDate)}</td>
+    <td><strong style="color:${r.daysLeft<0?'var(--danger)':r.daysLeft<=7?'var(--danger)':'var(--warning)'}">${r.daysLeft<0?'منتهي منذ '+Math.abs(r.daysLeft)+' يوم':r.daysLeft+' يوم'}</strong></td>
+    <td>${r.qty}</td><td>${r.wh}</td>
+    <td><span class="badge ${r.badgeClass}">${r.status}</span></td>
+  </tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted">لا توجد أصناف تنتهي صلاحيتها خلال هذه الفترة</td></tr>';
+}
+
+// ============================================================
+// ALERTS
+// ============================================================
+function getAlertCounts() {
+  const warnDays = DB.settings.expiryWarnDays || 30;
+  const now = new Date();
+  const lowStock = DB.items.filter(i=>i.stock<=i.reorderPoint && i.reorderPoint>0).length;
+  const expiryAlert = DB.movements.filter(m=>{ if(!m.expDate) return false; const d=Math.ceil((new Date(m.expDate)-now)/(1000*60*60*24)); return d<=warnDays; }).length;
+  return lowStock + expiryAlert;
+}
+
+function renderAlerts() {
+  const warnDays = DB.settings.expiryWarnDays || 30;
+  const now = new Date();
+  const low = DB.items.filter(i=>i.stock<=i.reorderPoint && i.reorderPoint>0);
+  const expiry = DB.movements.filter(m=>{ if(!m.expDate) return false; const d=Math.ceil((new Date(m.expDate)-now)/(1000*60*60*24)); return d<=warnDays; });
+
+  let html = '';
+  if(low.length) {
+    html += `<div class="alert alert-warning"><strong>⚠️ أصناف وصلت إلى الحد الأدنى (${low.length} صنف):</strong></div>
+    <div class="table-wrapper mb-3"><table><thead><tr><th>الصنف</th><th>الرصيد الحالي</th><th>الحد الأدنى</th><th>المخزن</th></tr></thead><tbody>
+    ${low.map(i=>{ const wh=DB.warehouses.find(w=>w.id===i.warehouseId); return `<tr><td>${i.name}</td><td style="color:var(--danger);font-weight:700">${i.stock} ${i.unit}</td><td>${i.reorderPoint}</td><td>${wh?wh.name:'-'}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  }
+  if(expiry.length) {
+    html += `<div class="alert alert-danger"><strong>⏰ أصناف قاربت على انتهاء الصلاحية (${expiry.length}):</strong></div>
+    <div class="table-wrapper"><table><thead><tr><th>الصنف</th><th>الدفعة</th><th>تاريخ الانتهاء</th><th>الأيام المتبقية</th></tr></thead><tbody>
+    ${expiry.map(m=>{ const item=DB.items.find(i=>i.id===m.itemId); const d=Math.ceil((new Date(m.expDate)-now)/(1000*60*60*24)); return `<tr><td>${item?item.name:'?'}</td><td>${m.batch||'-'}</td><td>${formatDate(m.expDate)}</td><td style="color:var(--danger);font-weight:700">${d<0?'منتهي':d+' يوم'}</td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  }
+  if(!html) html = '<div class="empty-state"><div class="empty-icon">✅</div><h3>لا توجد تنبيهات</h3><p>جميع الأصناف في وضع جيد</p></div>';
+  document.getElementById('alerts-content').innerHTML = html;
+}
+
+function updateAlertBadge() {
+  const count = getAlertCounts();
+  const badge = document.getElementById('alerts-badge');
+  badge.textContent = count;
+  badge.style.display = count>0?'':'none';
+  document.getElementById('notif-dot').style.display = count>0?'':'none';
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+function renderAudit() {
+  const tbody = document.getElementById('audit-tbody');
+  tbody.innerHTML = DB.auditLog.length ? DB.auditLog.map(e=>`<tr>
+    <td style="font-size:11px">${e.datetime}</td>
+    <td><strong>${e.user}</strong></td>
+    <td>${e.action}</td>
+    <td>${e.detail}</td>
+    <td><span class="badge badge-info">${e.section}</span></td>
+  </tr>`).join('') : '<tr><td colspan="5" class="text-center text-muted">لا توجد سجلات</td></tr>';
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+let chartMovement = null, chartProjects = null;
+
+function renderDashboard() {
+  const totalItems = DB.items.length;
+  const totalValue = DB.items.reduce((s,i)=>s+i.stock*i.cost,0);
+  const lowStock = DB.items.filter(i=>i.stock<=i.reorderPoint&&i.reorderPoint>0).length;
+  const warnDays = DB.settings.expiryWarnDays||30; const now=new Date();
+  const expiryCount = new Set(DB.movements.filter(m=>{ if(!m.expDate) return false; const d=Math.ceil((new Date(m.expDate)-now)/(1000*60*60*24)); return d<=warnDays; }).map(m=>m.itemId)).size;
+
+  document.getElementById('stat-items').textContent = totalItems;
+  document.getElementById('stat-value').textContent = formatCurrency(totalValue);
+  document.getElementById('stat-low').textContent = lowStock;
+  document.getElementById('stat-expiry').textContent = expiryCount;
+  document.getElementById('currency-label').textContent = DB.settings.currency;
+
+  // Reorder list
+  const low = DB.items.filter(i=>i.stock<=i.reorderPoint&&i.reorderPoint>0).slice(0,5);
+  document.getElementById('reorder-list').innerHTML = low.length ? low.map(i=>`
+    <div class="flex items-center justify-between p-3 bg-light rounded mb-2" style="border-right:3px solid var(--warning)">
+      <div><strong>${i.name}</strong><div class="text-sm text-muted">${i.code}</div></div>
+      <div class="text-center"><span style="color:var(--danger);font-size:18px;font-weight:800">${i.stock}</span><div class="text-sm text-muted">/ ${i.reorderPoint}</div></div>
+    </div>`).join('') : '<div class="empty-state"><div class="empty-icon">✅</div><p>لا توجد تنبيهات</p></div>';
+
+  // Expiry list
+  const exp = DB.movements.filter(m=>{ if(!m.expDate) return false; const d=Math.ceil((new Date(m.expDate)-now)/(1000*60*60*24)); return d<=warnDays; }).slice(0,5);
+  document.getElementById('expiry-list').innerHTML = exp.length ? exp.map(m=>{ const item=DB.items.find(i=>i.id===m.itemId); const d=Math.ceil((new Date(m.expDate)-now)/(1000*60*60*24)); return `
+    <div class="flex items-center justify-between p-3 bg-light rounded mb-2" style="border-right:3px solid var(--danger)">
+      <div><strong>${item?item.name:'?'}</strong><div class="text-sm text-muted">دفعة: ${m.batch||'-'}</div></div>
+      <div style="color:var(--danger);font-weight:700">${d<0?'منتهي':d+' يوم'}</div>
+    </div>`; }).join('') : '<div class="empty-state"><div class="empty-icon">✅</div><p>لا توجد تنبيهات</p></div>';
+
+  // Recent movements
+  const recent = [...DB.movements].reverse().slice(0,8);
+  document.getElementById('recent-movements').innerHTML = recent.length ? recent.map(m=>{
+    const item=DB.items.find(i=>i.id===m.itemId);
+    return `<tr>
+      <td>${m.refNo||'-'}</td>
+      <td><span class="badge ${m.in?'badge-success':'badge-warning'}">${m.type}</span></td>
+      <td>${item?item.name:'?'}</td>
+      <td>${m.in||m.out}</td>
+      <td>${formatDate(m.date)}</td>
+      <td>${DB.settings.username}</td>
+    </tr>`;
+  }).join('') : '<tr><td colspan="6" class="text-center text-muted">لا توجد حركات</td></tr>';
+
+  // Charts
+  const last7 = []; const labels = [];
+  for(let i=6;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); labels.push(d.toLocaleDateString('ar',{month:'short',day:'numeric'})); const ds=d.toISOString().split('T')[0]; last7.push(ds); }
+  const inQty = last7.map(d=>DB.movements.filter(m=>m.date===d&&m.in).reduce((s,m)=>s+(m.in||0),0));
+  const outQty = last7.map(d=>DB.movements.filter(m=>m.date===d&&m.out).reduce((s,m)=>s+(m.out||0),0));
+
+  if(chartMovement) chartMovement.destroy();
+  const ctx1 = document.getElementById('chart-movement')?.getContext('2d');
+  if(ctx1) {
+    chartMovement = new Chart(ctx1, { type:'bar', data:{ labels, datasets:[{label:'وارد',data:inQty,backgroundColor:'rgba(39,174,96,0.7)',borderRadius:6},{label:'صادر',data:outQty,backgroundColor:'rgba(192,57,43,0.7)',borderRadius:6}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{family:'Cairo',size:11}}}},scales:{x:{ticks:{font:{family:'Cairo'}}},y:{ticks:{font:{family:'Cairo'}}}}} });
+  }
+
+  const projData = DB.projects.map(p=>({ name:p.name, total:DB.issues.filter(i=>i.projectId===p.id).reduce((s,i)=>s+i.lines.reduce((ss,l)=>{ const item=DB.items.find(x=>x.id===l.itemId); return ss+(item?l.qty*item.cost:0); },0),0) })).filter(p=>p.total>0).slice(0,5);
+  if(chartProjects) chartProjects.destroy();
+  const ctx2 = document.getElementById('chart-projects')?.getContext('2d');
+  if(ctx2 && projData.length) {
+    chartProjects = new Chart(ctx2, { type:'doughnut', data:{ labels:projData.map(p=>p.name), datasets:[{data:projData.map(p=>p.total),backgroundColor:['#2e86c1','#27ae60','#d35400','#8e44ad','#c0392b'],borderWidth:2}]}, options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Cairo',size:11}}}}} });
+  }
+
+  updateAlertBadge();
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function exportTableToExcel(tableId, name) {
+  const table = document.getElementById(tableId);
+  if(!table) return;
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.table_to_sheet(table);
+  XLSX.utils.book_append_sheet(wb, ws, name);
+  XLSX.writeFile(wb, `${name}_${today()}.xlsx`);
+  addAuditLog('تصدير Excel', `تم تصدير: ${name}`, 'التقارير');
+}
+
+function printReport(tableId, title) {
+  const table = document.getElementById(tableId);
+  if(!table) return;
+  const w = window.open('','_blank');
+  w.document.write(`<html dir="rtl"><head><title>${title}</title>
+    <style>body{font-family:Cairo,sans-serif;direction:rtl}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ddd;padding:8px;text-align:right}th{background:#f0f0f0}</style>
+    </head><body><h2>${title} - ${formatDate(today())}</h2>${table.outerHTML}</body></html>`);
+  w.print();
+}
+
+// ============================================================
+// BACKUP
+// ============================================================
+function createBackup() {
+  const data = JSON.stringify(DB, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=`backup_${DB.settings.orgName||'inventory'}_${today()}.json`;
+  a.click(); URL.revokeObjectURL(url);
+  const logEntry = { id:genId(), date:new Date().toLocaleString('ar-EG'), size:(data.length/1024).toFixed(1)+'KB', items:DB.items.length, receipts:DB.receipts.length };
+  DB.backupLog.unshift(logEntry);
+  addAuditLog('نسخة احتياطية', 'تم إنشاء نسخة احتياطية', 'الإعدادات');
+  saveDB(); renderBackupLog();
+  showNotif('تم','تم تنزيل النسخة الاحتياطية','success');
+}
+
+function restoreBackup(input) {
+  const file = input.files[0];
+  if(!file) return;
+  confirm('تأكيد الاستعادة', 'سيتم استبدال جميع البيانات الحالية بالنسخة الاحتياطية. هل تريد المتابعة؟', ()=>{
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const restored = JSON.parse(e.target.result);
+        DB = restored;
+        applySettings();
+        saveDB();
+        renderBackupLog();
+        showNotif('تم الاستعادة','تم استعادة البيانات بنجاح','success');
+        navigate('dashboard');
+      } catch(err) { showNotif('خطأ','الملف غير صالح','error'); }
+    };
+    reader.readAsText(file);
+    input.value='';
+  });
+}
+
+function renderBackupLog() {
+  const el = document.getElementById('backup-log');
+  if(!DB.backupLog||!DB.backupLog.length) { el.innerHTML='<div class="empty-state"><div class="empty-icon">💾</div><p>لم يتم إنشاء أي نسخ احتياطية بعد</p></div>'; return; }
+  el.innerHTML = `<div class="table-wrapper"><table><thead><tr><th>التاريخ</th><th>الحجم</th><th>الأصناف</th><th>الإضافات</th></tr></thead><tbody>
+  ${DB.backupLog.map(b=>`<tr><td>${b.date}</td><td>${b.size}</td><td>${b.items}</td><td>${b.receipts}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+// ============================================================
+// GLOBAL SEARCH
+// ============================================================
+function openGlobalSearch() {
+  document.getElementById('global-search-input').value='';
+  document.getElementById('global-search-results').innerHTML='';
+  openModal('modal-search');
+  setTimeout(()=>document.getElementById('global-search-input').focus(),100);
+}
+
+function globalSearch(q) {
+  if(!q||q.length<2) { document.getElementById('global-search-results').innerHTML=''; return; }
+  const ql = q.toLowerCase();
+  const results = [];
+  DB.items.forEach(i=>{ if(`${i.name} ${i.code} ${i.barcode||''}`.toLowerCase().includes(ql)) results.push({type:'صنف',icon:'📦',title:i.name,sub:`${i.code} | رصيد: ${i.stock} ${i.unit}`,action:`showItemDetail('${i.id}')`}); });
+  DB.warehouses.forEach(w=>{ if(`${w.name} ${w.code}`.toLowerCase().includes(ql)) results.push({type:'مخزن',icon:'🏢',title:w.name,sub:w.location||w.type,action:`navigate('warehouses')`}); });
+  DB.projects.forEach(p=>{ if(`${p.name} ${p.code}`.toLowerCase().includes(ql)) results.push({type:'مشروع',icon:'🏗️',title:p.name,sub:p.status,action:`navigate('projects')`}); });
+  DB.receipts.forEach(r=>{ if(r.refNo.toLowerCase().includes(ql)) results.push({type:'إذن إضافة',icon:'📥',title:r.refNo,sub:formatDate(r.date)+' - '+r.supplier,action:`viewReceipt('${r.id}')`}); });
+  DB.issues.forEach(r=>{ if(r.refNo.toLowerCase().includes(ql)) results.push({type:'إذن صرف',icon:'📤',title:r.refNo,sub:formatDate(r.date)+' - '+r.receiver,action:`viewIssue('${r.id}')`}); });
+
+  document.getElementById('global-search-results').innerHTML = results.length ? results.map(r=>`
+    <div class="flex items-center gap-3 p-3 bg-light rounded mb-2" style="cursor:pointer" onclick="closeModal('modal-search');${r.action}">
+      <span style="font-size:22px">${r.icon}</span>
+      <div><div class="font-bold">${r.title}</div><div class="text-sm text-muted">${r.type} | ${r.sub}</div></div>
+    </div>`).join('') : '<div class="text-center text-muted p-3">لا توجد نتائج</div>';
+}
+
+// ============================================================
+// SAMPLE DATA
+// ============================================================
+function loadSampleData() {
+  if(DB.warehouses.length) return; // Don't reload
+  DB.warehouses = [
+    {id:'wh1',code:'WH-001',name:'المخزن الرئيسي',type:'رئيسي',manager:'أحمد محمد',location:'المنطقة الصناعية',notes:''},
+    {id:'wh2',code:'WH-002',name:'مخزن الطوارئ',type:'فرعي',manager:'محمود علي',location:'الطابق الثاني',notes:''},
+  ];
+  DB.mainCategories = [
+    {id:'mc1',name:'مواد البناء',desc:'جميع مواد البناء والتشييد'},
+    {id:'mc2',name:'أدوات كهربائية',desc:'معدات ومستلزمات كهربائية'},
+    {id:'mc3',name:'مستهلكات',desc:'مستلزمات مكتبية وغيرها'},
+  ];
+  DB.subCategories = [
+    {id:'sc1',name:'حديد وصلب',parentId:'mc1'},{id:'sc2',name:'أسمنت ورمل',parentId:'mc1'},
+    {id:'sc3',name:'كابلات وأسلاك',parentId:'mc2'},{id:'sc4',name:'قرطاسية',parentId:'mc3'},
+  ];
+  DB.items = [
+    {id:'it1',code:'ITM-001',barcode:'6281023456789',name:'حديد تسليح 12مم',mainCatId:'mc1',subCatId:'sc1',warehouseId:'wh1',unit:'طن',cost:18500,stock:45,reorderPoint:10,notes:''},
+    {id:'it2',code:'ITM-002',barcode:'6281023456790',name:'أسمنت بورتلاندي',mainCatId:'mc1',subCatId:'sc2',warehouseId:'wh1',unit:'كيس',cost:85,stock:250,reorderPoint:50,notes:''},
+    {id:'it3',code:'ITM-003',barcode:'6281023456791',name:'كابل كهربائي 4×16',mainCatId:'mc2',subCatId:'sc3',warehouseId:'wh1',unit:'متر',cost:45,stock:500,reorderPoint:100,notes:''},
+    {id:'it4',code:'ITM-004',barcode:'6281023456792',name:'ورق A4 80g',mainCatId:'mc3',subCatId:'sc4',warehouseId:'wh2',unit:'رزمة',cost:60,stock:8,reorderPoint:20,notes:''},
+    {id:'it5',code:'ITM-005',barcode:'6281023456793',name:'دهان أبيض داخلي',mainCatId:'mc1',subCatId:'sc2',warehouseId:'wh1',unit:'لتر',cost:35,stock:120,reorderPoint:30,notes:''},
+  ];
+  DB.projects = [
+    {id:'pr1',code:'PRJ-001',name:'مشروع برج الياسمين',manager:'م. سامي محمود',status:'نشط',notes:''},
+    {id:'pr2',code:'PRJ-002',name:'مشروع التوسعة الشمالية',manager:'م. عمر خالد',status:'نشط',notes:''},
+  ];
+  // Sample receipt
+  const today_str = today();
+  DB.receipts.push({id:'r1',refNo:'REC-0001',date:today_str,warehouseId:'wh1',supplier:'شركة الخليج للمواد',invoice:'INV-2024-001',committee:{p1:'أحمد محمد',p2:'خالد السيد',p3:'محمود إبراهيم',decision:'مقبول',notes:'البضاعة مطابقة للمواصفات'},lines:[{itemId:'it1',qty:20,price:18500,prodDate:'2024-01-01',expDate:'',batch:'BATCH-001'},{itemId:'it2',qty:100,price:85,prodDate:'2024-01-15',expDate:'2026-01-15',batch:'BATCH-002'}],notes:''});
+  DB.movements.push({id:'mv1',itemId:'it1',date:today_str,type:'إضافة',refNo:'REC-0001',in:20,out:null,balance:45,party:'شركة الخليج للمواد',batch:'BATCH-001',prodDate:'2024-01-01',expDate:'',warehouseId:'wh1'});
+  DB.movements.push({id:'mv2',itemId:'it2',date:today_str,type:'إضافة',refNo:'REC-0001',in:100,out:null,balance:250,party:'شركة الخليج للمواد',batch:'BATCH-002',prodDate:'2024-01-15',expDate:'2026-01-15',warehouseId:'wh1'});
+  // Sample issue
+  DB.issues.push({id:'is1',refNo:'ISS-0001',date:today_str,warehouseId:'wh1',receiver:'المهندس أحمد',projectId:'pr1',purpose:'أعمال الهيكل الإنشائي',lines:[{itemId:'it1',qty:5},{itemId:'it2',qty:50}],notes:''});
+  DB.movements.push({id:'mv3',itemId:'it1',date:today_str,type:'صرف',refNo:'ISS-0001',in:null,out:5,balance:40,party:'المهندس أحمد / مشروع برج الياسمين',warehouseId:'wh1',projectId:'pr1'});
+  DB.movements.push({id:'mv4',itemId:'it2',date:today_str,type:'صرف',refNo:'ISS-0001',in:null,out:50,balance:200,party:'المهندس أحمد / مشروع برج الياسمين',warehouseId:'wh1',projectId:'pr1'});
+  DB.counters = {receipt:2, issue:2, transfer:1};
+  // Near expiry
+  const exp = new Date(); exp.setDate(exp.getDate()+15);
+  DB.movements.push({id:'mv5',itemId:'it2',date:today_str,type:'إضافة',refNo:'REC-TEST',in:30,out:null,balance:230,party:'مورد تجريبي',batch:'EXP-BATCH',prodDate:'2023-01-15',expDate:exp.toISOString().split('T')[0],warehouseId:'wh1'});
+  addAuditLog('تهيئة النظام', 'تم تحميل البيانات التجريبية', 'النظام');
+  saveDB();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function showLoginScreen() {
+  const screen = document.createElement('div');
+  screen.id = 'login-screen';
+  screen.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#0d2137;color:#fff;font-family:"Cairo",sans-serif;text-align:center;padding:40px;';
+  screen.innerHTML = `
+      <div style="max-width:420px;">
+        <div style="font-size:48px;margin-bottom:16px;">📦</div>
+        <h2 style="margin-bottom:10px;">نظام إدارة المخازن الذكي</h2>
+        <p style="opacity:0.75;line-height:1.8;margin-bottom:28px;">سجّل الدخول بحساب Microsoft 365 الخاص بالمؤسسة للمتابعة</p>
+        <button id="ms-login-btn" style="background:#1a5276;color:#fff;border:none;padding:14px 28px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:16px;cursor:pointer;">
+          تسجيل الدخول بحساب Microsoft
+        </button>
+        <p id="login-error" style="color:#ff8080;margin-top:16px;font-size:14px;"></p>
+      </div>`;
+  document.body.appendChild(screen);
+  document.getElementById('ms-login-btn').addEventListener('click', async () => {
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+    try {
+      currentSPUser = await spSignIn();
+      screen.remove();
+      await startApp();
+    } catch (e) {
+      console.error('MSAL sign-in error:', e);
+      errEl.textContent = 'تعذر تسجيل الدخول: ' + (e && (e.errorMessage || e.message) || String(e));
+    }
+  });
+}
+
+window.addEventListener('load', async ()=>{
+  await msalInstance.initialize();
+  const account = msalInstance.getActiveAccount() || (msalInstance.getAllAccounts()[0] || null);
+  if (!account) {
+    showLoginScreen();
+    return;
+  }
+  msalInstance.setActiveAccount(account);
+  currentSPUser = { loginName: account.username, displayName: account.name || account.username };
+  await startApp();
+});
+
+async function startApp() {
+  const overlay = document.createElement('div');
+  overlay.id = 'sp-loading-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:#f0f4f8;display:flex;align-items:center;justify-content:center;z-index:9999;font-family:Cairo,sans-serif;color:#1a5276;font-size:16px;';
+  overlay.textContent = 'جارِ تحميل البيانات من SharePoint...';
+  document.body.appendChild(overlay);
+
+  try {
+    await spLoadAll();
+    await loadUserRole();
+  } catch (e) {
+    console.error('SharePoint data load error:', e);
+    overlay.textContent = 'تعذر الاتصال بقاعدة البيانات على SharePoint: ' + (e && (e.errorMessage || e.message) || String(e));
+    return;
+  }
+
+  // Real, non-editable identity for audit logging — replaces the manually-typed name
+  DB.settings.username = currentSPUser.displayName;
+
+  if (!isAdmin) {
+    document.querySelectorAll('.nav-item').forEach(el => {
+      const oc = el.getAttribute('onclick');
+      if (oc && oc.includes("'settings'")) el.style.display = 'none';
+    });
+  }
+
+  loadSampleData(); // only seeds demo data if the SharePoint list came back empty
+  applySettings();
+  renderDashboard();
+  updateAlertBadge();
+  overlay.remove();
+
+  // Close modals on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(ov=>{
+    ov.addEventListener('click', (e)=>{ if(e.target===ov) ov.classList.remove('open'); });
+  });
+  // Barcode input support (auto-detect via keyboard speed)
+  let barcodeBuffer=''; let barcodeTimer=null;
+  document.addEventListener('keypress', (e)=>{
+    if(document.activeElement.tagName==='INPUT'&&document.activeElement.type!=='text') return;
+    if(e.key==='Enter'&&barcodeBuffer.length>5) {
+      const search = document.getElementById('item-search');
+      if(search&&document.getElementById('page-items').classList.contains('active')) { search.value=barcodeBuffer; filterItems(barcodeBuffer); }
+      barcodeBuffer='';
+    } else {
+      clearTimeout(barcodeTimer);
+      barcodeBuffer += e.key;
+      barcodeTimer = setTimeout(()=>barcodeBuffer='', 100);
+    }
+  });
+}
+</script>
+</body>
+</html>
